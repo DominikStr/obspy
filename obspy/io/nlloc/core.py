@@ -21,7 +21,7 @@ import numpy as np
 from obspy import Catalog, UTCDateTime, __version__
 from obspy.core.event import (Arrival, Comment, CreationInfo, Event, Origin,
                               OriginQuality, OriginUncertainty, Pick,
-                              WaveformStreamID)
+                              WaveformStreamID, ConfidenceEllipsoid)
 from obspy.geodetics import kilometer2degrees
 
 
@@ -197,8 +197,20 @@ def _read_single_hypocenter(lines, coordinate_converter, original_picks):
     # distribution statistics line
     line = lines["STATISTICS"]
     covariance_xx = float(line.split()[7])
+    covariance_xy = float(line.split()[9])
+    covariance_xz = float(line.split()[11])
     covariance_yy = float(line.split()[13])
+    covariance_yz = float(line.split()[15])
     covariance_zz = float(line.split()[17])
+    azimuth1 = float(line.split()[19])
+    dip1 = float(line.split()[21])
+    len1 = float(line.split()[23])
+    azimuth2 = float(line.split()[25])
+    dip2 = float(line.split()[27])
+    len2 = float(line.split()[29])
+    len3 = float(line.split()[31])
+
+
     stats_info_string = str(
         "Note: Depth/Latitude/Longitude errors are calculated from covariance "
         "matrix as 1D marginal (Lon/Lat errors as great circle degrees) "
@@ -296,6 +308,103 @@ def _read_single_hypocenter(lines, coordinate_converter, original_picks):
     ou.azimuth_max_horizontal_uncertainty = hor_unc_azim
     ou.preferred_description = str("uncertainty ellipse")
     ou.confidence_level = 68  # NonLinLoc in general uses 1-sigma (68%) level
+
+    cov = np.array([[covariance_xx, covariance_xy, covariance_xz],
+                    [covariance_xy, covariance_yy, covariance_yz],
+                    [covariance_xz, covariance_yz, covariance_zz]])
+
+    # the code to compute the Tait-Bryan representation of the error ellipsoid
+    # is adapted from "https://github.com/alomax/utilites/blob/master/
+    # matrix_statistics/matrix_statistics.c " by Anthony Lomax
+
+    w, v = np.linalg.eigh(cov)
+
+    #  there seem to be different sign convention between numpy and the c code
+    v *= -1
+
+    azimuth_v1 = np.rad2deg(np.arctan2(v[0][0], v[1][0]))
+    if azimuth_v1 < 0.0:
+        azimuth_v1 += 360
+
+    azimuth_v2 = np.rad2deg(np.arctan2(v[0][1], v[1][1]))
+    if azimuth_v2 < 0.0:
+        azimuth_v2 += 360
+
+    azimuth_v3 = np.rad2deg(np.arctan2(v[0][2], v[1][2]))
+    if azimuth_v3 < 0.0:
+        azimuth_v3 += 360
+
+    print("Azimuthes: ")
+    print(azimuth_v1, azimuth1)
+    print(azimuth_v2, azimuth2)
+    print(azimuth_v3)
+
+    plunge_v1 = np.rad2deg(np.arcsin(v[2][0]))
+    plunge_v2 = np.rad2deg(np.arcsin(v[2][1]))
+    plunge_v3 = np.rad2deg(np.arcsin(v[0][0]))
+
+    print("Plunges: ")
+    print(plunge_v1, dip1)
+    print(plunge_v2, dip2)
+    print(plunge_v3)
+
+    print("lenght: ")
+    print(np.sqrt(3.53*w), len1, len2, len3)
+
+    # few transformations to get rotation:
+    phi = plunge_v3
+    psi = azimuth_v3
+
+    r_phi = np.array([[np.cos(np.deg2rad(phi)), 0, np.sin(np.deg2rad(phi))],
+                      [0, 1, 0],
+                      [np.sin(np.deg2rad(phi)), 0, np.cos(np.deg2rad(phi))]])
+    r_psi = np.array([[np.cos(np.deg2rad(psi)), np.sin(np.deg2rad(psi)), 0],
+                      [-np.sin(np.deg2rad(psi)), np.cos(np.deg2rad(psi)), 0],
+                      [0, 0, 1]])
+
+    t = np.zeros([3, 3])
+
+    phi_maj = plunge_v3
+    psi_maj = azimuth_v3
+    t[0][0] = np.cos(np.deg2rad(psi_maj)) * np.cos(np.deg2rad(phi_maj))
+    t[0][1] = np.sin(np.deg2rad(psi_maj)) * np.cos(np.deg2rad(phi_maj))
+    t[0][2] = np.sin(np.deg2rad(phi_maj))
+
+    phi_min = plunge_v1
+    psi_min = azimuth_v1
+    t[1][0] = np.cos(np.deg2rad(psi_min)) * np.cos(np.deg2rad(phi_min))
+    t[1][1] = np.sin(np.deg2rad(psi_min)) * np.cos(np.deg2rad(phi_min))
+    t[1][2] = np.sin(np.deg2rad(phi_min))
+
+    phi_int = plunge_v2
+    psi_int = azimuth_v2
+    t[2][0] = np.cos(np.deg2rad(psi_int)) * np.cos(np.deg2rad(phi_int))
+    t[2][1] = np.sin(np.deg2rad(psi_int)) * np.cos(np.deg2rad(phi_int))
+    t[2][2] = np.sin(np.deg2rad(phi_int))
+
+    #  invert rpsi
+    inv_r_psi = np.linalg.inv(r_psi)
+
+    #  invert rpsi
+    inv_r_phi = np.linalg.inv(r_phi)
+
+    #  dot product
+    dot_t__inv_r_psi_inv_r_phi = np.dot(t, np.dot(inv_r_psi, inv_r_phi))
+
+    theta = np.rad2deg(np.arctan2(dot_t__inv_r_psi_inv_r_phi[1][2],
+                                  dot_t__inv_r_psi_inv_r_phi[1][1]))
+
+    print("rotation: ")
+    rot3 = theta
+    print(rot3)
+
+    ou.confidence_ellipsoid = \
+        ConfidenceEllipsoid(semi_minor_axis_length=len1,
+                            semi_intermediate_axis_length=len2,
+                            semi_major_axis_length=len3,
+                            major_axis_rotation=rot3,
+                            major_axis_azimuth=azimuth_v3,
+                            major_axis_plunge=plunge_v3)
 
     oq.standard_error = stderr
     oq.azimuthal_gap = az_gap
