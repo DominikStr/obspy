@@ -104,6 +104,9 @@ int generalizedBeamformer(double *relpow, double *abspow, const cplx * const ste
                     eHR_ne.im += STEER(n,x,y,i).re * R_ne.im - STEER(n,x,y,i).im * R_ne.re; /* eH, conjugate */
                 }
                 pow = sqrt(eHR_ne.re * eHR_ne.re + eHR_ne.im * eHR_ne.im);
+                				if(method == CAPON){
+				                    pow += 1e-9;
+				                }
                 pow = (method == CAPON) ? 1. / pow : pow;
                 white = fmax(pow, white);
                 P_N(x,y)= pow;
