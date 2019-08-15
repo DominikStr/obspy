@@ -1948,7 +1948,7 @@ class SeismicArray(object):
         :param fmax: Maximum frequency (only for slowness calculation).
         :param fstep: Frequency sample distance (only with slowness).
         """
-        if isinstance(plim, float) or isinstance(plim, int):
+        if isinstance(plim, (float, int, np.int32, np.int64)):
             pxmin = -plim
             pxmax = plim
             pymin = -plim
@@ -2486,7 +2486,7 @@ class SeismicArray(object):
                     distances[name].append(i)
                     ttimes[name].append(arrival.time)
 
-            for key in distances.iterkeys():
+            for key in distances.keys():
                 min_distance = min(distances[key])
                 max_distance = max(distances[key])
                 min_tt_time = min(ttimes[key])
@@ -2557,7 +2557,7 @@ class SeismicArray(object):
                 nfft = next_pow_2(ndat)
                 nfft *= 2
                 tr1 = np.fft.rfft(tr.data, int(nfft))
-                for k in range(0, nfft/2,1):
+                for k in range(0, int(nfft/2),1):
                     tr1[k] *= np.complex(
                         np.cos((t_shift[i] * samp) * (k / float(nfft))
                            * 2. * np.pi),
