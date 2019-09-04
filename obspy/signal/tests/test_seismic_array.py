@@ -38,7 +38,7 @@ class SeismicArrayTestCase(unittest.TestCase):
                                                  'data'))
         self.path_images = os.path.join(os.path.dirname(__file__), 'images')
 
-        def create_simple_array(coords, sys='xy'):
+        def create_simple_array(coords, sys='xy', include_cha=False):
             """
             Set up a legal array more easily from x-y or long-lat coordinates.
             Note it's usually lat-lon in other applications.
@@ -48,9 +48,18 @@ class SeismicArrayTestCase(unittest.TestCase):
                                  for stn in coords]
             else:
                 coords_lonlat = coords
-            stns = [Station(str(_i), coords_lonlat[_i][1],
-                            coords_lonlat[_i][0], 0)  # flat!
-                    for _i in range(len(coords_lonlat))]
+
+            if include_cha:
+                chas = [Channel(str(_i), str(_i), coords_lonlat[_i][1],
+                                coords_lonlat[_i][0], 0, 0)  # flat!
+                        for _i in range(len(coords_lonlat))]
+                stns = [Station(str(_i), coords_lonlat[_i][1],
+                                coords_lonlat[_i][0], 0, channels=[chas[_i]])
+                        for _i in range(len(coords_lonlat))]
+            else:
+                stns = [Station(str(_i), coords_lonlat[_i][1],
+                                coords_lonlat[_i][0], 0)  # flat!
+                        for _i in range(len(coords_lonlat))]
             testinv = Inventory([Network("testnetwork", stations=stns)],
                                 'testsender')
             return SeismicArray('testarray', inventory=testinv)
@@ -58,6 +67,9 @@ class SeismicArrayTestCase(unittest.TestCase):
         # Set up an array for geometry tests.
         geometry_coords = [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]]
         self.geometry_array = create_simple_array(geometry_coords, 'longlat')
+        self.geometry_array_w_chas = create_simple_array(geometry_coords,
+                                                         'longlat',
+                                                         include_cha=True)
 
         # Set up the test array for the _covariance_array_processing,
         # stream_offset and array_rotation_strain tests.
@@ -81,6 +93,7 @@ class SeismicArrayTestCase(unittest.TestCase):
 
     def test__get_geometry(self):
         geo = self.geometry_array.geometry
+        geo_w_chas = self.geometry_array_w_chas.geometry
         geo_exp = {'testnetwork.0..': {'absolute_height_in_km': 0.0,
                                        'latitude': 0.0, 'longitude': 0.0},
                    'testnetwork.1..': {'absolute_height_in_km': 0.0,
@@ -91,8 +104,19 @@ class SeismicArrayTestCase(unittest.TestCase):
                                        'latitude': 2.0, 'longitude': 0.0},
                    'testnetwork.4..': {'absolute_height_in_km': 0.0,
                                        'latitude': 2.0, 'longitude': 2.0}}
+        geo_exp_ch = {'testnetwork.0.0.0': {'absolute_height_in_km': 0.0,
+                                            'latitude': 0.0, 'longitude': 0.0},
+                      'testnetwork.1.1.1': {'absolute_height_in_km': 0.0,
+                                            'latitude': 0.0, 'longitude': 2.0},
+                      'testnetwork.2.2.2': {'absolute_height_in_km': 0.0,
+                                            'latitude': 1.0, 'longitude': 1.0},
+                      'testnetwork.3.3.3': {'absolute_height_in_km': 0.0,
+                                            'latitude': 2.0, 'longitude': 0.0},
+                      'testnetwork.4.4.4': {'absolute_height_in_km': 0.0,
+                                            'latitude': 2.0, 'longitude': 2.0}}
+
         self.assertEqual(geo, geo_exp)
-        # todo test for inventories with and w/o channels
+        self.assertEqual(geo_w_chas, geo_exp_ch)
 
     def test_get_geometry_xyz(self):
         """
