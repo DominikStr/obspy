@@ -1364,12 +1364,12 @@ class SeismicArray(object):
                 csamp[:, 2] = np.cumsum(ampn)
                 ampw = np.zeros(n_freqs, dtype=csamp.dtype)
                 for k in range(3):
-                    ampw[ww / 2:n_freqs - ww / 2] += (csamp[ww:, k] -
+                    ampw[int(ww / 2):int(n_freqs - ww / 2)] += (csamp[ww:, k] -
                                                       csamp[:-ww, k]) / ww
                 # Fill zero elements at start and end of array with closest
                 # non-zero value.
-                ampw[n_freqs - ww / 2:] = ampw[n_freqs - ww / 2 - 1]
-                ampw[:ww / 2] = ampw[ww / 2]
+                ampw[int(n_freqs - ww / 2):] = ampw[int(n_freqs - ww / 2 - 1)]
+                ampw[:int(ww / 2)] = ampw[int(ww / 2)]
                 ampw *= 1 / 3.
                 # Weights are 1/ampw unless ampw is very small, then 0.
                 weight = np.where(ampw > np.finfo(np.float).eps * 10.,

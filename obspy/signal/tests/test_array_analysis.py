@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+ #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 Test suite for
@@ -14,6 +14,7 @@ import numpy as np
 from obspy.signal.array_analysis import (array_rotation_strain, get_geometry,
                                          get_timeshift)
 
+KM_PER_DEG = 111.1949
 
 class ArrayTestCase(unittest.TestCase):
     """
@@ -224,7 +225,8 @@ class ArrayTestCase(unittest.TestCase):
             [[2, 4], [4, 6]],
             # Station at index 4.
             [[4, 8], [8, 12]]
-        ]), rtol=1E-5)
+            # LatLon has to be converted into km
+        ])/KM_PER_DEG, rtol=1E-5)
 
 
 def suite():
