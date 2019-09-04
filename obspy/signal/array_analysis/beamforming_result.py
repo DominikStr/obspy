@@ -39,7 +39,7 @@ def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
     t, rel_power, abs_power, baz, slow = out.T
     baz[baz < 0.0] += 360
     # now let's do the plotting
-    cmap = cm.viridis
+    cmap = cm.get_cmap('viridis')
 
     numslice = len(t)
     powmap = []
@@ -136,7 +136,7 @@ def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
             sl = slowgrid[:, 1]
             bz = slowgrid[:, 0]
             slowg = slowgrid[:, 2]
-            grid = interpolate.griddata((bz,sl), slowg,
+            grid = interpolate.griddata((bz, sl), slowg,
                                         (grid_x, grid_y),
                                         method='nearest')
             ax.pcolormesh(np.radians(xi), yi, grid, cmap=cmap)
@@ -147,7 +147,7 @@ def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
                 tsl = transgrid[:, 1]
                 tbz = transgrid[:, 0]
                 transg = transgrid[:, 2]
-                trans = interpolate.griddata((tbz,tsl), transg,
+                trans = interpolate.griddata((tbz, tsl), transg,
                                      (grid_x, grid_y),
                                      method='nearest')
                 ax.contour(np.radians(xi), yi, trans, levels=level, colors='w',alpha=0.5)
@@ -393,7 +393,7 @@ class BeamformerResult(object):
         from matplotlib.colorbar import ColorbarBase
         from matplotlib.colors import Normalize
         import matplotlib.pyplot as plt
-        cmap = cm.viridis
+        cmap = cm.get_cmap('viridis')
         # Can't plot negative slownesses:
         sll = abs(self.slowness_range).min()
         slm = self.slowness_range.max()
@@ -471,7 +471,7 @@ class BeamformerResult(object):
             ax = fig.add_subplot(len(labels), 1, i + 1)
             ax.scatter(self._get_plotting_timestamps(), data,
                        c=self.max_rel_power, alpha=0.6, edgecolors='none',
-                       cmap=cm.viridis)
+                       cmap='viridis')
             ax.set_ylabel(lab)
             timemargin = 0.05 * (self._get_plotting_timestamps()[-1] -
                                  self._get_plotting_timestamps()[0])
@@ -534,7 +534,7 @@ class BeamformerResult(object):
             ax = fig.add_subplot(len(labels), 1, i + 1)
 
             pc = ax.pcolormesh(self._get_plotting_timestamps(extended=True),
-                               azis, data.T, cmap=cm.viridis,
+                               azis, data.T, cmap='viridis',
                                rasterized=True)
             timemargin = 0.05 * (self._get_plotting_timestamps(extended=True
                                                                )[-1] -
@@ -595,7 +595,7 @@ class BeamformerResult(object):
             """
             fig = plt.figure()
             ax = fig.add_subplot(1, 1, 1, projection='polar')
-            cmap = cm.viridis
+            cmap = cm.get_cmap('viridis')
             contf = ax.contourf(theo_backazi, self.slowness_range, bfres.T,
                                 100, cmap=cmap, antialiased=True,
                                 linstyles='dotted')

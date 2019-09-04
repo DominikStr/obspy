@@ -25,14 +25,15 @@ import numpy as np
 import scipy as sp
 from scipy.integrate import cumtrapz
 import matplotlib.pyplot as plt
-import matplotlib.patheffects as PathEffects
+import matplotlib.patheffects as patheffects
 
 from obspy.core import Trace, Stream, UTCDateTime
 from obspy.core.event.event import Event
 from obspy.core.event.origin import Origin
 from obspy.core.inventory import Inventory
 from obspy.core.util import AttribDict
-from obspy.geodetics import gps2dist_azimuth, degrees2kilometers,locations2degrees
+from obspy.geodetics import gps2dist_azimuth, degrees2kilometers, \
+    locations2degrees
 from obspy.imaging import cm
 from obspy.imaging.cm import obspy_sequential
 from obspy.signal.headers import clibsignal
@@ -42,8 +43,11 @@ from obspy.taup import TauPyModel
 
 from obspy.signal.array_analysis.beamforming_result import BeamformerResult
 from obspy.signal.array_analysis.beamforming_result import plot_array_analysis
+from obspy.signal.array_analysis.array_rotation_strain import \
+    array_rotation_strain
 
 KM_PER_DEG = 111.1949
+
 
 def _get_stream_offsets(stream, stime, etime):
     """
@@ -104,6 +108,7 @@ class SeismicArray(object):
     * Y positive to north
     * Z positive up
     """
+
     def __init__(self, name, inventory):
         self.name = name
         if not isinstance(inventory, Inventory):
@@ -149,7 +154,7 @@ class SeismicArray(object):
                 for i, cha in reversed(list(enumerate(stn.channels))):
                     if ("{}.{}.{}.{}".format(netw.code, stn.code,
                                              cha.location_code, cha.code)
-                       not in stations_present):
+                            not in stations_present):
                         del stn.channels[i]
                         continue
                         # Also remove if it doesn't cover the time of the
@@ -208,7 +213,7 @@ class SeismicArray(object):
                                   method="basemap", **kwargs)
         bmap = fig.bmap
 
-        path_effects = [PathEffects.withStroke(linewidth=3,
+        path_effects = [patheffects.withStroke(linewidth=3,
                                                foreground="white")]
 
         grav = self.center_of_gravity
@@ -229,7 +234,6 @@ class SeismicArray(object):
         bmap.ax.set_title(str(self).splitlines()[0].strip())
 
         if show:
-            import matplotlib.pyplot as plt
             plt.show()
         return fig
 
@@ -265,7 +269,7 @@ class SeismicArray(object):
                         {"latitude": float(station.latitude),
                          "longitude": float(station.longitude),
                          "absolute_height_in_km":
-                         float(station.elevation) / 1000.0}
+                             float(station.elevation) / 1000.0}
                     geo[item_code] = this_coordinates
                 else:
                     for channel in station:
@@ -277,7 +281,8 @@ class SeismicArray(object):
                             {"latitude": float(channel.latitude),
                              "longitude": float(channel.longitude),
                              "absolute_height_in_km":
-                             float(channel.elevation - channel.depth) / 1000.0}
+                                 float(
+                                     channel.elevation - channel.depth) / 1000.0}
                         geo[item_code] = this_coordinates
         return geo
 
@@ -295,8 +300,8 @@ class SeismicArray(object):
             "longitude": (extent["max_longitude"] +
                           extent["min_longitude"]) / 2.0,
             "absolute_height_in_km":
-            (extent["min_absolute_height_in_km"] +
-             extent["max_absolute_height_in_km"]) / 2.0
+                (extent["min_absolute_height_in_km"] +
+                 extent["max_absolute_height_in_km"]) / 2.0
         }
 
     @property
@@ -440,16 +445,18 @@ class SeismicArray(object):
 
         time_shift_tbl = {}
         slownesses = np.arange(sll, slm, sls)
-        # we have to bring slowness (ray based coordinate system) and baz (oposite direction) together -slowness
+        # we have to bring slowness (ray based coordinate system) and
+        # baz (oposite direction) together -slowness
         time_shift_tbl[None] = slownesses
 
         for key, value in list(geom.items()):
-            time_shifts = -slownesses/KM_PER_DEG * (value["x"] * math.sin(baz) +
-                                        value["y"] * math.cos(baz))
+            time_shifts = -slownesses / KM_PER_DEG * \
+                          (value["x"] * math.sin(baz) + value["y"] * math.cos(
+                              baz))
 
             if static3d:
                 try:
-                    inc = np.arcsin(vel_cor * slownesses/KM_PER_DEG)
+                    inc = np.arcsin(vel_cor * slownesses / KM_PER_DEG)
                 except ValueError:
                     # if vel_cor given as dict:
                     inc = np.pi / 2.0
@@ -498,9 +505,9 @@ class SeismicArray(object):
             time_shift_tbl = np.empty((nstat, grdpts_x, grdpts_y),
                                       dtype="float32")
             for k in range(grdpts_x):
-                sx = (sllx + k * sls)/KM_PER_DEG
+                sx = (sllx + k * sls) / KM_PER_DEG
                 for l in range(grdpts_y):
-                    sy = (slly + l * sls)/KM_PER_DEG
+                    sy = (slly + l * sls) / KM_PER_DEG
                     slow = np.sqrt(sx * sx + sy * sy)
                     if vel_cor * slow <= 1.:
                         inc = np.arcsin(vel_cor * slow)
@@ -510,12 +517,16 @@ class SeismicArray(object):
                             " velocity")
                         inc = np.pi / 2.
                     time_shift_tbl[:, k, l] = sx * geometry[:, 0] + sy * \
-                        geometry[:, 1] + geometry[:, 2] * np.cos(inc) / vel_cor
+                                              geometry[:, 1] + geometry[:,
+                                                               2] * np.cos(
+                        inc) / vel_cor
             return time_shift_tbl
         # optimized version
         else:
-            mx = np.outer(geometry[:, 0], (sllx + np.arange(grdpts_x) * sls)/KM_PER_DEG)
-            my = np.outer(geometry[:, 1], (slly + np.arange(grdpts_y) * sls)/KM_PER_DEG)
+            mx = np.outer(geometry[:, 0],
+                          (sllx + np.arange(grdpts_x) * sls) / KM_PER_DEG)
+            my = np.outer(geometry[:, 1],
+                          (slly + np.arange(grdpts_y) * sls) / KM_PER_DEG)
             return np.require(
                 mx[:, :, np.newaxis].repeat(grdpts_y, axis=2) +
                 my[:, np.newaxis, :].repeat(grdpts_x, axis=1),
@@ -552,7 +563,7 @@ class SeismicArray(object):
         elif isinstance(reference, dict):
             center_ = reference
             center_['absolute_height_in_km'] = (
-                center_.pop('elevation') / 1000.0)
+                    center_.pop('elevation') / 1000.0)
         else:
             msg = "Unrecognized value for 'reference' option: {}"
             raise ValueError(msg.format(reference))
@@ -571,14 +582,12 @@ class SeismicArray(object):
         else:
             baz = float(event_or_baz)
             if align:
-                msg = "For the alin option an event has to be specified"
+                msg = "For the aling option an event has to be specified"
                 raise ValueError(msg)
 
         if align:
-            for item in phase_name:
-                stream=align_phases(self,stream, origin_, item, vel_model='ak135')
-
-
+            for item in align_phase:
+                stream = self.align_phases(self, stream, origin_, item)
 
         time_shift_table = self._get_timeshift_baz(
             sll, slm, sls, baz, latitude=center_['latitude'],
@@ -602,40 +611,41 @@ class SeismicArray(object):
             sampling_rate = stream[0].stats.sampling_rate
             delta = 1 / sampling_rate
             npts = len(beams[0])
-            t = np.arange(0, npts/sampling_rate, delta)
+            t = np.arange(0, npts / sampling_rate, delta)
             max_amp = np.max(np.abs(beams))
             scale = sls / max_amp
             scale *= wiggle_scale
 
             if plot == 'wiggle':
-                for i_,beam in enumerate(beams):
+                for i_, beam in enumerate(beams):
                     if i_ == beam_max:
-                        ax.plot(t, slownesses[i_] + scale*beams[i_], 'r',
-                             zorder=1)
+                        ax.plot(t, slownesses[i_] + scale * beams[i_], 'r',
+                                zorder=1)
                     else:
-                        ax.plot(t, slownesses[i_] + scale*beams[i_], 'k',
-                             zorder=-1)
+                        ax.plot(t, slownesses[i_] + scale * beams[i_], 'k',
+                                zorder=-1)
                 ax.set_xlabel('Time [s]')
                 ax.set_ylabel('slowness [s/deg]')
                 ax.set_xlim(t[0], t[-1])
                 data_minmax = ax.yaxis.get_data_interval()
-                minmax = [min(slownesses[0], data_minmax[0]), max(slownesses[-1], data_minmax[1])]
+                minmax = [min(slownesses[0], data_minmax[0]),
+                          max(slownesses[-1], data_minmax[1])]
                 ax.set_ylim(*minmax)
 
-#                for i, (beam, slowness) in enumerate(zip(beams, slownesses)):
-#                    if i == beam_max:
-#                        color = "r"
-#                        zorder = 2
-#                    else:
-#                        color = "k"
-#                        zorder = 1
-#                    ax.plot(t, slowness + scale * beam,
-#                            color, zorder=zorder)
-#
-#                ax.set_xlim(t[0], t[-1])
-#                data_minmax = ax.yaxis.get_data_interval()
-#                minmax = [min(slownesses[0], data_minmax[0]), max(slownesses[-1], data_minmax[1])]
-#                ax.set_ylim(*minmax)
+            #                for i, (beam, slowness) in enumerate(zip(beams, slownesses)):
+            #                    if i == beam_max:
+            #                        color = "r"
+            #                        zorder = 2
+            #                    else:
+            #                        color = "k"
+            #                        zorder = 1
+            #                    ax.plot(t, slowness + scale * beam,
+            #                            color, zorder=zorder)
+            #
+            #                ax.set_xlim(t[0], t[-1])
+            #                data_minmax = ax.yaxis.get_data_interval()
+            #                minmax = [min(slownesses[0], data_minmax[0]), max(slownesses[-1], data_minmax[1])]
+            #                ax.set_ylim(*minmax)
 
             elif plot == 'density':
                 extent = (t[0] - delta * 0.5, t[-1] + delta * 0.5,
@@ -717,9 +727,9 @@ class SeismicArray(object):
             for _j, trace in enumerate(comp):
                 tr[_i][:, _j][:] = np.require(trace.data, np.float64)
 
-        sp = self.array_rotation_strain(subarray, tr[0], tr[1], tr[2], vp=vp,
-                                        vs=vs, array_coords=array_coords,
-                                        sigmau=sigmau)
+        sp = array_rotation_strain(subarray, tr[0], tr[1], tr[2], vp=vp,
+                                   vs=vs, array_coords=array_coords,
+                                   sigmau=sigmau)
 
         d1 = sp.pop("ts_w1")
         d2 = sp.pop("ts_w2")
@@ -728,7 +738,7 @@ class SeismicArray(object):
         header = {"network": "XX", "station": "YY", "location": "99",
                   "starttime": list(components.values())[0][0].stats.starttime,
                   "sampling_rate":
-                  list(components.values())[0][0].stats.sampling_rate,
+                      list(components.values())[0][0].stats.sampling_rate,
                   "channel": "ROZ",
                   "npts": len(d1)}
 
@@ -744,7 +754,8 @@ class SeismicArray(object):
 
     def slowness_whitened_power(self, stream, frqlow, frqhigh,
                                 prefilter=True, plots=(),
-                                static3d=False, array_response=False,vel_corr=4.8, wlen=-1,wfrac=1.,
+                                static3d=False, array_response=False,
+                                vel_corr=4.8, wlen=-1, wfrac=1.,
                                 slx=(-10, 10), sly=(-10, 10), sls=0.5):
         """
         Slowness whitened power analysis.
@@ -782,14 +793,16 @@ class SeismicArray(object):
         return self._array_analysis_helper(stream=stream, method="SWP",
                                            frqlow=frqlow, frqhigh=frqhigh,
                                            prefilter=prefilter, plots=plots,
-                                           static3d=static3d,array_r=array_response,
-                                           vel_corr=vel_corr, wlen=wlen,wfrac=wfrac,
+                                           static3d=static3d,
+                                           array_r=array_response,
+                                           vel_corr=vel_corr, wlen=wlen,
+                                           wfrac=wfrac,
                                            slx=slx, sly=sly, sls=sls)
 
     def phase_weighted_stack(self, stream, frqlow, frqhigh,
                              prefilter=True, plots=(),
-                             static3d=False,array_response=False,
-                             vel_corr=4.8, wlen=-1, wfrac=1.,slx=(-10, 10),
+                             static3d=False, array_response=False,
+                             vel_corr=4.8, wlen=-1, wfrac=1., slx=(-10, 10),
                              sly=(-10, 10), sls=0.5):
         """
         Phase weighted stack analysis.
@@ -827,13 +840,16 @@ class SeismicArray(object):
         return self._array_analysis_helper(stream=stream, method="PWS",
                                            frqlow=frqlow, frqhigh=frqhigh,
                                            prefilter=prefilter, plots=plots,
-                                           static3d=static3d,array_r=array_response,
-                                           vel_corr=vel_corr, wlen=wlen,wfrac=wfrac,
+                                           static3d=static3d,
+                                           array_r=array_response,
+                                           vel_corr=vel_corr, wlen=wlen,
+                                           wfrac=wfrac,
                                            slx=slx, sly=sly, sls=sls)
 
     def delay_and_sum(self, stream, frqlow, frqhigh,
-                      prefilter=True, plots=(), static3d=False,array_response=False,
-                      vel_corr=4.8, wlen=-1,wfrac=1., slx=(-10, 10),
+                      prefilter=True, plots=(), static3d=False,
+                      array_response=False,
+                      vel_corr=4.8, wlen=-1, wfrac=1., slx=(-10, 10),
                       sly=(-10, 10), sls=0.5):
         """
         Delay and sum analysis.
@@ -871,12 +887,15 @@ class SeismicArray(object):
         return self._array_analysis_helper(stream=stream, method="DLS",
                                            frqlow=frqlow, frqhigh=frqhigh,
                                            prefilter=prefilter, plots=plots,
-                                           static3d=static3d,array_r=array_response,
-                                           vel_corr=vel_corr, wlen=wlen,wfrac=wfrac,
+                                           static3d=static3d,
+                                           array_r=array_response,
+                                           vel_corr=vel_corr, wlen=wlen,
+                                           wfrac=wfrac,
                                            slx=slx, sly=sly, sls=sls)
 
     def fk_analysis(self, stream, frqlow, frqhigh,
-                    prefilter=True, plots=(),static3d=False,array_response=False,
+                    prefilter=True, plots=(), static3d=False,
+                    array_response=False,
                     vel_corr=4.8, wlen=-1, wfrac=0.8,
                     slx=(-10, 10), sly=(-10, 10), sls=0.5):
         """
@@ -917,13 +936,14 @@ class SeismicArray(object):
         return self._array_analysis_helper(stream=stream, method="FK",
                                            frqlow=frqlow, frqhigh=frqhigh,
                                            prefilter=prefilter, plots=plots,
-                                           static3d=static3d,array_r=array_response,
+                                           static3d=static3d,
+                                           array_r=array_response,
                                            vel_corr=vel_corr,
                                            wlen=wlen, wfrac=wfrac,
                                            slx=slx, sly=sly, sls=sls)
 
     def _array_analysis_helper(self, stream, method, frqlow, frqhigh,
-                               prefilter=True, static3d=False,array_r=False,
+                               prefilter=True, static3d=False, array_r=False,
                                vel_corr=4.8, wlen=-1, wfrac=0.8, slx=(-10, 10),
                                sly=(-10, 10), sls=0.5,
                                plots=()):
@@ -1026,13 +1046,15 @@ class SeismicArray(object):
         invbkp = copy.deepcopy(self.inventory)
         self.inventory_cull(st_workon)
         if array_r:
-            sll = np.max(np.absolute([sllx,slly,slmx,slmy]))
-            frqstep = (frqhigh-frqlow)/10.
-            transff =self.array_transfer_function_freqslowness(sll, sls,frqlow, frqhigh,frqstep)
+            sll = np.max(np.absolute([sllx, slly, slmx, slmy]))
+            frqstep = (frqhigh - frqlow) / 10.
+            transff = self.array_transfer_function_freqslowness(sll, sls,
+                                                                frqlow,
+                                                                frqhigh,
+                                                                frqstep)
             print(np.max(transff))
         else:
             transff = None
-
 
         try:
             if method == 'FK':
@@ -1076,8 +1098,8 @@ class SeismicArray(object):
                 start = UTCDateTime()
                 outarr = self._beamforming(st_workon, **kwargs)
                 print("Total time in routine: %f\n" % (UTCDateTime() - start))
-                t, rel_power,abs_power, baz, slow = outarr.T
-                #abs_power = None
+                t, rel_power, abs_power, baz, slow = outarr.T
+                # abs_power = None
 
             baz[baz < 0.0] += 360
             if wlen < 0:
@@ -1101,13 +1123,15 @@ class SeismicArray(object):
 
             # now let's do the plotting
             if "slowness_baz" in plots:
-                plot_array_analysis(outarr,transff, sllx, slmx, slly, slmy, sls,
-                                     filename_patterns, True, method,array_r,
-                                     st_workon, starttime, wlen, endtime)
+                plot_array_analysis(outarr, transff, sllx, slmx, slly, slmy,
+                                    sls,
+                                    filename_patterns, True, method, array_r,
+                                    st_workon, starttime, wlen, endtime)
             if "slowness_xy" in plots:
-                plot_array_analysis(outarr,transff, sllx, slmx, slly, slmy, sls,
-                                     filename_patterns, False, method,array_r,
-                                     st_workon, starttime, wlen, endtime)
+                plot_array_analysis(outarr, transff, sllx, slmx, slly, slmy,
+                                    sls,
+                                    filename_patterns, False, method, array_r,
+                                    st_workon, starttime, wlen, endtime)
             plt.show()
             # Return the beamforming results to allow working more on them,
             # make other plots etc.
@@ -1116,7 +1140,7 @@ class SeismicArray(object):
             self.inventory = invbkp
             shutil.rmtree(tmpdir)
 
-    def _attach_coords_to_stream(self, stream,event=None):
+    def _attach_coords_to_stream(self, stream, event=None):
         """
         Attaches dictionary with latitude, longitude and elevation to each
         trace in stream as `trace.stats.coords`. Takes into account local
@@ -1129,16 +1153,19 @@ class SeismicArray(object):
             if event:
                 event_lat = event.origins[0].latitude
                 event_lng = event.origins[0].longitude
-                dist = locations2degrees(coords["latitude"],coords["longitude"], event_lat, event_lng)
+                dist = locations2degrees(coords["latitude"],
+                                         coords["longitude"], event_lat,
+                                         event_lng)
                 tr.stats.coordinates = \
                     AttribDict(dict(latitude=coords["latitude"],
-                                longitude=coords["longitude"],
-                                elevation=coords["absolute_height_in_km"],distance=dist))
+                                    longitude=coords["longitude"],
+                                    elevation=coords["absolute_height_in_km"],
+                                    distance=dist))
             else:
                 tr.stats.coordinates = \
                     AttribDict(dict(latitude=coords["latitude"],
-                                longitude=coords["longitude"],
-                                elevation=coords["absolute_height_in_km"]))
+                                    longitude=coords["longitude"],
+                                    elevation=coords["absolute_height_in_km"]))
 
     def _covariance_array_processing(self, stream, win_len, win_frac, sll_x,
                                      slm_x, sll_y, slm_y, sl_s, semb_thres,
@@ -1352,7 +1379,7 @@ class SeismicArray(object):
                 ampn = np.abs(fcoeffn[nst, nwin, :])
                 ampe = np.abs(fcoeffe[nst, nwin, :])
                 # window width can be chosen but must be at least 2 and even:
-                ww = int(round(whiten/deltaf))
+                ww = int(round(whiten / deltaf))
                 if ww == 0:
                     ww = 2
                 if ww % 2:
@@ -1365,7 +1392,8 @@ class SeismicArray(object):
                 ampw = np.zeros(n_freqs, dtype=csamp.dtype)
                 for k in range(3):
                     ampw[int(ww / 2):int(n_freqs - ww / 2)] += (csamp[ww:, k] -
-                                                      csamp[:-ww, k]) / ww
+                                                                csamp[:-ww,
+                                                                k]) / ww
                 # Fill zero elements at start and end of array with closest
                 # non-zero value.
                 ampw[int(n_freqs - ww / 2):] = ampw[int(n_freqs - ww / 2 - 1)]
@@ -1430,11 +1458,11 @@ class SeismicArray(object):
         nstep = int(nsamp * win_frac)
         # Number of windows is determined by data length minus one window
         # length divided by step length, then adding the one omitted window.
-        num_win = int((datalen_sec*fs - nsamp)/nstep) + 1
+        num_win = int((datalen_sec * fs - nsamp) / nstep) + 1
         out_wins = int(np.floor(num_win / win_average))
         if not out_wins > 0:
             msg = "Zero output windows! Check data length, and parameters " \
-                          "window_length, win_frac and win_average."
+                  "window_length, win_frac and win_average."
             raise ValueError(msg)
 
         alldata_z = np.zeros((n_stats, num_win, nsamp))
@@ -1445,21 +1473,21 @@ class SeismicArray(object):
         for i in range(num_win):
             for n in range(n_stats):
                 if not np.isnan(_alldata_z[n, i * nstep:i * nstep +
-                                           nsamp]).any() \
+                                                        nsamp]).any() \
                         and not np.isnan(_alldata_n[n, i * nstep:i * nstep +
-                                                    nsamp]).any() \
+                                                                 nsamp]).any() \
                         and not np.isnan(_alldata_e[n, i * nstep:i * nstep +
-                                                    nsamp]).any():
+                                                                 nsamp]).any():
                     # All data, tapered.
                     alldata_z[n, i, :] = _alldata_z[n, i * nstep:
-                                                    i * nstep + nsamp] * \
-                        cosine_taper(nsamp)
+                                                       i * nstep + nsamp] * \
+                                         cosine_taper(nsamp)
                     alldata_n[n, i, :] = _alldata_n[n, i * nstep:
-                                                    i * nstep + nsamp] * \
-                        cosine_taper(nsamp)
+                                                       i * nstep + nsamp] * \
+                                         cosine_taper(nsamp)
                     alldata_e[n, i, :] = _alldata_e[n, i * nstep:
-                                                    i * nstep + nsamp] * \
-                        cosine_taper(nsamp)
+                                                       i * nstep + nsamp] * \
+                                         cosine_taper(nsamp)
                     nst[i] += 1
 
         # Need an array of the starting times of the beamforming windows for
@@ -1469,7 +1497,7 @@ class SeismicArray(object):
         avg_starttime = UTCDateTime(np.mean([tr.stats.starttime.timestamp for
                                              tr in stream_n.traces]))
         window_start_times = \
-            np.array([UTCDateTime(avg_starttime + i * nstep/fs,
+            np.array([UTCDateTime(avg_starttime + i * nstep / fs,
                                   precision=len(str(fs).split('.')[0]))
                       for i in range(num_win) if i % win_average == 0])
         if verbose:
@@ -1489,11 +1517,11 @@ class SeismicArray(object):
         # for final Power Spectral Density output using half-sided spectrum,
         # traces are normalized by SQRT(fs*windowing-function factor*0.5)
         fcoeffz = np.fft.fft(alldata_z, n=nsamp, axis=-1) / \
-            np.sqrt(fs * (cosine_taper(nsamp) ** 2).sum() * 0.5)
+                  np.sqrt(fs * (cosine_taper(nsamp) ** 2).sum() * 0.5)
         fcoeffn = np.fft.fft(alldata_n, n=nsamp, axis=-1) / \
-            np.sqrt(fs * (cosine_taper(nsamp) ** 2).sum() * 0.5)
+                  np.sqrt(fs * (cosine_taper(nsamp) ** 2).sum() * 0.5)
         fcoeffe = np.fft.fft(alldata_e, n=nsamp, axis=-1) / \
-            np.sqrt(fs * (cosine_taper(nsamp) ** 2).sum() * 0.5)
+                  np.sqrt(fs * (cosine_taper(nsamp) ** 2).sum() * 0.5)
         fcoeffz = fcoeffz[:, :, index]
         fcoeffn = fcoeffn[:, :, index]
         fcoeffe = fcoeffe[:, :, index]
@@ -1506,7 +1534,7 @@ class SeismicArray(object):
                 msg = ('Whiten parameter must be digits. It was set to 0.01.')
                 warnings.warn(msg)
                 whiten = 0.01
-            if whiten >= fr[-1]-fr[0]:
+            if whiten >= fr[-1] - fr[0]:
                 msg = ('Moving frequency window is %s, it equals or exceeds '
                        'the entire frequency range and was set to 0.01 now.')
                 warnings.warn(msg % whiten)
@@ -1514,9 +1542,9 @@ class SeismicArray(object):
             fcoeffz, fcoeffn, fcoeffe = self._three_c_dowhiten(
                 fcoeffz, fcoeffn, fcoeffe, deltaf, whiten)
         if phaseonly:
-            fcoeffz = np.exp(1j*np.angle(fcoeffz))
-            fcoeffn = np.exp(1j*np.angle(fcoeffn))
-            fcoeffe = np.exp(1j*np.angle(fcoeffe))
+            fcoeffz = np.exp(1j * np.angle(fcoeffz))
+            fcoeffn = np.exp(1j * np.angle(fcoeffn))
+            fcoeffe = np.exp(1j * np.angle(fcoeffe))
 
         # slowness vector u and slowness vector component scale u_x and u_y
         theo_backazi = theo_backazi.reshape((theo_backazi.size, 1))
@@ -1577,7 +1605,7 @@ class SeismicArray(object):
             omega = 2 * math.pi * fr[f]
             for win in range(0, out_wins * win_average, win_average):
                 if any(nst[win:win + win_average] < n_min_stns) or any(
-                                nst[win:win + win_average] != nst[win]):
+                        nst[win:win + win_average] != nst[win]):
                     continue
                 sz = np.squeeze(fcoeffz[:, win, f])
                 sn = np.squeeze(fcoeffn[:, win, f])
@@ -1606,9 +1634,11 @@ class SeismicArray(object):
                     e_steere = e_steer.copy()
                     e_steern = e_steer.copy()
                     e_steere = (e_steere.T * np.array([ch[polarisation](azi)[0]
-                                for azi in range(len(theo_backazi))])).T
+                                                       for azi in range(
+                            len(theo_backazi))])).T
                     e_steern = (e_steern.T * np.array([ch[polarisation](azi)[1]
-                                for azi in range(len(theo_backazi))])).T
+                                                       for azi in range(
+                            len(theo_backazi))])).T
 
                     if polarisation in [0, 1]:
                         w = np.concatenate(
@@ -1617,7 +1647,7 @@ class SeismicArray(object):
                         wt = w.T.copy()
                         beamres[:, vel, int(win / win_average), f] = 1. / (
                                 nst[win] * nst[win]) * abs(
-                                (np.conjugate(w) * np.dot(r, wt).T).sum(1))
+                            (np.conjugate(w) * np.dot(r, wt).T).sum(1))
                         if coherency:
                             beamres[:, vel, int(win / win_average), f] /= \
                                 abs(np.sum(np.diag(r)))
@@ -1634,7 +1664,7 @@ class SeismicArray(object):
                             wt = w.T.copy()
                             res[:, vel, inc_angle] = 1. / (
                                     nst[win] * nst[win]) * abs(
-                                    (np.conjugate(w) * np.dot(r, wt).T).sum(1))
+                                (np.conjugate(w) * np.dot(r, wt).T).sum(1))
                             if coherency:
                                 res[:, vel, inc_angle] /= \
                                     abs(np.sum(np.diag(r)))
@@ -1651,7 +1681,7 @@ class SeismicArray(object):
                             wt = w.T.copy()
                             res[:, vel, inc_angle] = 1. / (
                                     nst[win] * nst[win]) * abs(
-                                    (np.conjugate(w) * np.dot(r, wt).T).sum(1))
+                                (np.conjugate(w) * np.dot(r, wt).T).sum(1))
                             if coherency:
                                 res[:, vel, inc_angle] /= \
                                     abs(np.sum(np.diag(r)))
@@ -1661,7 +1691,7 @@ class SeismicArray(object):
                                                res.shape)
                     beamres[:, :, int(win / win_average), f] = res[:, :, k]
                     incidence[int(win / win_average), f] = incs[k] * 180. / \
-                        math.pi
+                                                           math.pi
 
         return beamres, fr, incidence, window_start_times
 
@@ -1838,11 +1868,11 @@ class SeismicArray(object):
                 w = np.exp(-1j * steering * omega * u[vel])
                 wt = w.T.copy()
                 beamres[:, vel] = 1. / (
-                    steering.shape[1] * steering.shape[1]) * abs(
+                        steering.shape[1] * steering.shape[1]) * abs(
                     (np.conjugate(w) * np.dot(r, wt).T).sum(1))
             fig = plt.figure()
             ax = fig.add_subplot(1, 1, 1, projection='polar')
-            cmap = cm.viridis
+            cmap = plt.cm.get_cmap('viridis')
             contf = ax.contourf(theo_backazi, u,
                                 beamres.T, 40, cmap=cmap, antialiased=True,
                                 linstyles='dotted')
@@ -1903,7 +1933,7 @@ class SeismicArray(object):
         """
         import matplotlib.pyplot as plt
         ranges = np.arange(-lim, lim + step, step)
-        #plt.pcolor(ranges, ranges, transff.T, cmap=cm.viridis)
+        # plt.pcolor(ranges, ranges, transff.T, cmap=cm.viridis)
         plt.contour(ranges, ranges, transff.T, 10)
         plt.colorbar()
         plt.clim(vmin=0., vmax=1.)
@@ -1961,7 +1991,7 @@ class SeismicArray(object):
         else:
             raise TypeError('Parameter slim must either be a float '
                             'or a tuple of length 4.')
-        #geometry = self._geometry_dict_to_array(self._get_geometry_xyz(
+        # geometry = self._geometry_dict_to_array(self._get_geometry_xyz(
         #    **self.center_of_gravity))
         geometry = self._geometry_dict_to_array(self.geometry)
         npx = int(np.ceil((pxmax + pstep / 10. - pxmin) / pstep))
@@ -2124,12 +2154,12 @@ class SeismicArray(object):
                                                                shifted)
                                 beam += 1. / nstat * np.power(
                                     np.abs(shifted), 1. / nthroot) * \
-                                    shifted / np.abs(shifted)
+                                        shifted / np.abs(shifted)
                             except IndexError:
                                 break
                         beam = np.power(np.abs(beam), nthroot) * \
-                            beam / np.abs(beam)
-                        bs = np.sum(beam*beam)
+                               beam / np.abs(beam)
+                        bs = np.sum(beam * beam)
                         abspow_map[x, y] = bs / singlet
                         if abspow_map[x, y] > max_beam:
                             max_beam = abspow_map[x, y]
@@ -2145,7 +2175,7 @@ class SeismicArray(object):
                                                 fs + 0.5)
                             try:
                                 shifted = sp.signal.hilbert(stream[i].data[
-                                    s + offset: s + nsamp + offset])
+                                                            s + offset: s + nsamp + offset])
                                 if len(shifted) < nsamp:
                                     shifted = np.pad(
                                         shifted, (0, nsamp - len(shifted)),
@@ -2160,7 +2190,7 @@ class SeismicArray(object):
                             s = spoint[i] + int(
                                 time_shift_table[i, x, y] * fs + 0.5)
                             shifted = stream[i].data[
-                                s + offset: s + nsamp + offset]
+                                      s + offset: s + nsamp + offset]
                             singlet += 1. / nstat * np.sum(shifted * shifted)
                             beam += 1. / nstat * shifted * np.power(coh,
                                                                     nthroot)
@@ -2229,7 +2259,8 @@ class SeismicArray(object):
                 slow = 1e-8
             azimut = 180 * math.atan2(slow_x, slow_y) / math.pi
             baz = azimut % -360 + 180
-            res.append(np.array([newstart.timestamp, abspow, abspow, baz, slow]))
+            res.append(
+                np.array([newstart.timestamp, abspow, abspow, baz, slow]))
             if verbose:
                 print(newstart, (newstart + (nsamp / fs)), res[-1][1:])
             if (newstart + (nsamp + nstep) / fs) > etime:
@@ -2269,7 +2300,7 @@ class SeismicArray(object):
         maxi = max(value.max() for key, value in time_shift_table.items()
                    if key is not None)
         spoint, _etime = _get_stream_offsets(stream, (starttime - mini),
-                                        (endtime - maxi))
+                                             (endtime - maxi))
 
         # time shift table has slowness array under key `None`
         slownesses = time_shift_table[None]
@@ -2291,14 +2322,16 @@ class SeismicArray(object):
             if method == 'DLS':
                 for _j, tr in enumerate(stream.traces):
                     station = tr.id
-                    s = spoint[_j] + int(time_shift_table[station][_i] * fs + 0.5)
+                    s = spoint[_j] + int(
+                        time_shift_table[station][_i] * fs + 0.5)
                     shifted = tr.data[s: s + ndat]
                     singlet += 1. / len(stream) * np.sum(shifted * shifted)
-                    beams[_i] += 1. / len(stream) * np.power(np.abs(shifted),1./nthroot) * \
-                        shifted / np.abs(shifted)
+                    beams[_i] += 1. / len(stream) * np.power(np.abs(shifted),
+                                                             1. / nthroot) * \
+                                 shifted / np.abs(shifted)
 
                 beams[_i] = np.power(np.abs(beams[_i]), nthroot) * \
-                    beams[_i] / np.abs(beams[_i])
+                            beams[_i] / np.abs(beams[_i])
 
                 bs = np.sum(beams[_i] * beams[_i])
                 bs /= singlet
@@ -2315,7 +2348,8 @@ class SeismicArray(object):
                 nstat = len(stream)
                 for _j, tr in enumerate(stream.traces):
                     station = tr.id
-                    s = spoint[_j] + int(time_shift_table[station][_i] * fs + 0.5)
+                    s = spoint[_j] + int(
+                        time_shift_table[station][_i] * fs + 0.5)
                     try:
                         shifted = sp.signal.hilbert(tr.data[s:s + ndat])
                     except IndexError:
@@ -2326,7 +2360,8 @@ class SeismicArray(object):
                 coh = 1. / nstat * np.abs(stack)
                 for _j, tr in enumerate(stream.traces):
                     station = tr.id
-                    s = spoint[_j] + int(time_shift_table[station][_i] * fs + 0.5)
+                    s = spoint[_j] + int(
+                        time_shift_table[station][_i] * fs + 0.5)
                     shifted = tr.data[s: s + ndat]
                     singlet += 1. / nstat * np.sum(shifted * shifted)
                     beams[_i] += 1. / nstat * shifted * np.power(coh, nthroot)
@@ -2393,17 +2428,17 @@ class SeismicArray(object):
         # geometry[:,2] += v[2,-1]
         n = v[:, -1]
         result[:, 0] = (geometry[:, 0] - n[0] * (
-            n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
-            geometry[:, 2]) / (
-                            n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
+                n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
+                geometry[:, 2]) / (
+                                n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
         result[:, 1] = (geometry[:, 1] - n[1] * (
-            n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
-            geometry[:, 2]) / (
-                            n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
+                n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
+                geometry[:, 2]) / (
+                                n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
         result[:, 2] = (geometry[:, 2] - n[2] * (
-            n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
-            geometry[:, 2]) / (
-                            n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
+                n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
+                geometry[:, 2]) / (
+                                n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
         geometry = result[:]
         # print("Best fitting plane-coordinates :\n", geometry)
 
@@ -2420,19 +2455,21 @@ class SeismicArray(object):
         geometry = geodict
         return geometry
 
-    def show_distance_plot(self,stream, event, starttime, endtime, plot_travel_times=True,vel_model='ak135'):
+    def show_distance_plot(self, stream, event, starttime, endtime,
+                           plot_travel_times=True, vel_model='ak135'):
         """
         Plots distance dependent seismogramm sections.
         :param stream: Waveforms for the array processing.
         :type stream: :class:`obspy.core.stream.Stream`
-        :param event: earthquake position (lat/lon/depth) to which distance is calculated
+        :param event: earthquake position (lat/lon/depth) to which distance is
+            calculated
         :type event:
         :param starttime: starttime of traces to be plotted
         :type starttime: UTCDateTime
-        :param endttime: endttime of traces to be plotted
-        :type endttime: UTCDateTime
-        :param plot_travel_times: flag wether phases are marked as traveltime plots in the section
-                              obspy.taup is used to calculate the phases
+        :param endtime: endtime of traces to be plotted
+        :type endtime: UTCDateTime
+        :param plot_travel_times: flag weather phases are marked as traveltime
+            plots in the section obspy.taup is used to calculate the phases
         :type: bool
         """
         model = TauPyModel(model=vel_model)
@@ -2440,16 +2477,19 @@ class SeismicArray(object):
         event_depth_in_km = event.origins[0].depth / 1000.0
         event_time = event.origins[0].time
 
-        self._attach_coords_to_stream(stream,event)
+        self._attach_coords_to_stream(stream, event)
 
-        cm = plt.cm.jet
+        cmap = plt.cm.get_cmap('jet')
 
-        stream.traces = sorted(stream.traces, key=lambda x: x.stats.coordinates.distance)[::-1]
+        stream.traces = sorted(stream.traces,
+                               key=lambda x: x.stats.coordinates.distance)[
+                        ::-1]
         # One color for each trace.
-        colors = [cm(_i) for _i in np.linspace(0, 1, len(stream))]
+        colors = [cmap(_i) for _i in np.linspace(0, 1, len(stream))]
 
         # Relative event times.
-        times_array = stream[0].times() + (stream[0].stats.starttime - event_time)
+        times_array = stream[0].times() + \
+                      (stream[0].stats.starttime - event_time)
 
         distances = [tr.stats.coordinates.distance for tr in stream]
         min_distance = min(distances)
@@ -2466,7 +2506,8 @@ class SeismicArray(object):
         plt.figure(figsize=(20, 12))
         for _i, tr in enumerate(stream):
             plt.plot(times_array, tr.data, label="%s.%s" % (tr.stats.network,
-                 tr.stats.station), color=colors[_i])
+                                                            tr.stats.station),
+                     color=colors[_i])
         plt.grid()
         plt.ylabel("Distance in degree to event")
         plt.xlabel("Time in seconds since event")
@@ -2480,7 +2521,8 @@ class SeismicArray(object):
             ttimes = defaultdict(list)
 
             for i in np.linspace(dist_min, dist_max, 100):
-                tts = model.get_travel_times(distance_in_degree=i, source_depth_in_km=event_depth_in_km)
+                tts = model.get_travel_times(distance_in_degree=i,
+                                             source_depth_in_km=event_depth_in_km)
                 for arrival in tts:
                     name = arrival.name
                     distances[name].append(i)
@@ -2493,16 +2535,18 @@ class SeismicArray(object):
                 max_tt_time = max(ttimes[key])
 
                 if min_tt_time >= times_array[-1] or \
-                    max_tt_time <= times_array[0] or \
-                    (max_distance - min_distance) < 0.8 * (dist_max - dist_min):
+                        max_tt_time <= times_array[0] or \
+                        (max_distance - min_distance) < 0.8 * (
+                        dist_max - dist_min):
                     continue
                 ttime = ttimes[key]
                 dist = distances[key]
                 if max(ttime) > times_array[0] + 0.9 * times_array.ptp():
                     continue
-                plt.scatter(ttime, dist, s=0.5, zorder=-10, color="black", alpha=0.8)
+                plt.scatter(ttime, dist, s=0.5, zorder=-10, color="black",
+                            alpha=0.8)
                 plt.text(max(ttime) + 0.005 * times_array.ptp(),
-                           dist_max - 0.02 * (dist_max - dist_min),key)
+                         dist_max - 0.02 * (dist_max - dist_min), key)
 
         plt.ylim(dist_min, dist_max)
         plt.xlim(times_array[0], times_array[-1])
@@ -2510,14 +2554,13 @@ class SeismicArray(object):
 
         plt.show()
 
-
-    def align_phases(self,stream, event, phase_name, vel_model='ak135'):
+    def align_phases(self, stream, event, phase_name, vel_model='ak135'):
 
         if isinstance(event, Event):
             origin_ = event.origins[0]
 
-        elif isinstance(event_or_baz, Origin):
-            origin_ = origins
+        elif isinstance(event, Origin):
+            origin_ = event
 
         starttime = max([tr.stats.starttime for tr in stream])
         stt = starttime
@@ -2526,30 +2569,34 @@ class SeismicArray(object):
         stream.trim(starttime, endtime)
         shift = []
         stream = stream.copy()
-        self._attach_coords_to_stream(stream,event)
+        self._attach_coords_to_stream(stream, event)
 
-        stream.traces = sorted(stream.traces, key=lambda x: x.stats.coordinates.distance)[::-1]
+        stream.traces = sorted(stream.traces,
+                               key=lambda x: x.stats.coordinates.distance)[
+                        ::-1]
         model = TauPyModel(model=vel_model)
 
         for tr in stream:
-            tt = model.get_travel_times(distance_in_degree=tr.stats.coordinates.distance, source_depth_in_km=origin_.depth / 1000.0)
+            tt = model.get_travel_times(
+                distance_in_degree=tr.stats.coordinates.distance,
+                source_depth_in_km=origin_.depth / 1000.0)
             for t in tt:
                 if t.name != phase_name:
                     continue
                 tt_t = t.time
                 break
             try:
-               travel = origin_.time.timestamp + tt_t
-               dtime = travel - stt.timestamp
-               shift.append(dtime)
+                travel = origin_.time.timestamp + tt_t
+                dtime = travel - stt.timestamp
+                shift.append(dtime)
             except:
-               break
+                break
         shift = np.asarray(shift)
         shift -= shift[0]
         self.shifttrace_freq(stream, -shift)
         return stream
 
-    def shifttrace_freq(self,stream, t_shift):
+    def shifttrace_freq(self, stream, t_shift):
         if isinstance(stream, Stream):
             for i, tr in enumerate(stream):
                 ndat = tr.stats.npts
@@ -2557,15 +2604,16 @@ class SeismicArray(object):
                 nfft = next_pow_2(ndat)
                 nfft *= 2
                 tr1 = np.fft.rfft(tr.data, int(nfft))
-                for k in range(0, int(nfft/2),1):
+                for k in range(0, int(nfft / 2), 1):
                     tr1[k] *= np.complex(
                         np.cos((t_shift[i] * samp) * (k / float(nfft))
-                           * 2. * np.pi),
+                               * 2. * np.pi),
                         -np.sin((t_shift[i] * samp) *
-                            (k / float(nfft)) * 2. * np.pi))
+                                (k / float(nfft)) * 2. * np.pi))
 
                 tr1 = np.fft.irfft(tr1, nfft)
                 tr.data = tr1[0:ndat]
+
 
 if __name__ == '__main__':
     import doctest
