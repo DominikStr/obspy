@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """
 Seismic array class.
+
 :copyright:
     The ObsPy Development Team (devs@obspy.org)
 :license:
@@ -46,14 +47,13 @@ def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
 
     slx = np.arange(sllx - sls, slmx, sls)
     sly = np.arange(slly - sls, slmy, sls)
-    sll = np.max(np.absolute([sllx,slly,slmx,slmy]))
+    sll = np.min(np.absolute([sllx,slly,slmx,slmy]))
     slll = np.arange(-sll - sls, sll, sls)
     if baz_plot:
         maxslowg = np.sqrt(2*sll**2)
-        bzs = np.arctan2(sls, np.sqrt(
-            2*sll**2)) * 180 / np.pi
-        xi = np.arange(0., 360., bzs)
-        yi = np.arange(0., maxslowg, sls)
+        bzs = np.arctan2(sls, maxslowg) * 180 / np.pi
+        xi = np.arange(0., 360. + bzs, bzs)
+        yi = np.arange(0., maxslowg + sls, sls)
         grid_x, grid_y = np.meshgrid(xi, yi)
     # reading in the rel-power maps
     for i in range(numslice):
@@ -157,7 +157,8 @@ def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
             ax.grid(color='w')
             ax.set_xticklabels(['N', 'E', 'S', 'W'])
             #ax.set_xlim(0,360)
-            ax.set_ylim(yi[0], yi[-1])
+            # ax.set_ylim(yi[0], yi[-1])
+            ax.set_ylim(0, maxslowg)
         else:
             ax = fig.add_axes([0.10, 0.1, 0.70, 0.7])
             ax.set_xlabel('slowness [s/deg]')
@@ -188,6 +189,7 @@ def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
 class BeamformerResult(object):
     """
     Contains results from beamforming and attached plotting methods.
+
     This class is an attempt to standardise the output of the various
     beamforming algorithms in :class:`SeismicArray`, and provide a range of
     plotting options. To that end, the raw output from the beamformers is
@@ -195,7 +197,9 @@ class BeamformerResult(object):
     parameters, including: the frequency and slowness ranges, time frame and
     the inventory defining the array (this will only include the stations for
     which data were actually available during the considered time frame).
+
     .. rubric:: Data transformation
+
     The different beamforming algorithms produce output in different
     formats, so it needs to be standardised. The
     :meth:`.SeismicArray.slowness_whitened_power`,
@@ -209,22 +213,28 @@ class BeamformerResult(object):
     slowness values are also converted to radial slowness and backazimuth.
     Returning the complete data arrays for these methods is not currently
     implemented.
+
     Working somewhat differently,
     :meth:`.SeismicArray.three_component_beamforming` returns a
     four-dimensional numpy array of relative powers for every backazimuth,
     slowness, time window and discrete frequency, but no absolute powers.
     This data allows the creation of the same plots as the previous methods,
     as the maximum powers is easily calulated from the full power array.
+
     .. rubric:: Concatenating results
+
     To allow for the creation of beamformer output plots over long
     timescales where the beamforming might performed not all at once,
     the results may be concatenated (added). This is done by simple adding
     syntax:
+
     >>> long_results = beamresult_1 + beamresult_2 # doctest:+SKIP
+
     Of course, this only makes sense if the two added result objects are
     consistent. The :meth:`__add__` method checks that they were created by
     the same beamforming method, with the same slowness and frequency
     ranges. Only then are the data combined.
+
     :param inventory: The inventory that was actually used in the beamforming.
     :param win_starttimes: Start times of the beamforming windows.
     :type win_starttimes: numpy array of
@@ -385,9 +395,11 @@ class BeamformerResult(object):
     def plot_baz_hist(self, show=True):
         """
         Plot a backazimuth - slowness radial histogram.
+
         The backazimuth and slowness values of the maximum relative powers
         of each beamforming window are counted into bins defined
         by slowness and backazimuth, weighted by the power.
+
         :param show: Whether to call plt.show() immediately.
         """
         from matplotlib.colorbar import ColorbarBase
@@ -450,6 +462,7 @@ class BeamformerResult(object):
         """
         Plot beamforming results over time, with the relative power as
         colorscale.
+
         :param show: Whether to call plt.show() immediately.
         """
         import matplotlib.pyplot as plt
@@ -499,6 +512,7 @@ class BeamformerResult(object):
         """
         Plot relative power as a function of backazimuth and time, like a
         Vespagram.
+
         Requires full 4D results, at the moment only provided by
         :meth:`three_component_beamforming`.
         :param plot_frequencies: Discrete frequencies for which windows
@@ -564,9 +578,11 @@ class BeamformerResult(object):
         """
         Plot beamforming results as individual polar plots of relative power as
         function of backazimuth and slowness.
+
         Can plot results averaged over windows/frequencies, results for each
         window and every frequency individually, or for selected frequencies
         only.
+
         :param average_windows: Whether to plot an average of results over all
          windows.
         :param average_freqs: Whether to plot an average of results over all
@@ -671,6 +687,7 @@ class BeamformerResult(object):
         """
         Plot the radial transfer function of the array and slowness range used
         to produce this result.
+
         :param plot_freqs: List of discrete frequencies for which the transfer
          function should be plotted. Defaults to the minimum and maximum of the
          frequency range used in the generation of this results object.

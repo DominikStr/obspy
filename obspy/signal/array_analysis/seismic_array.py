@@ -53,6 +53,7 @@ def _get_stream_offsets(stream, stime, etime):
     """
     Calculates start and end offsets relative to stime and etime for each
     trace in stream in samples.
+
     :type stime: :class:`~obspy.core.utcdatetime.UTCDateTime`
     :param stime: Start time
     :type etime: :class:`~obspy.core.utcdatetime.UTCDateTime`
@@ -80,6 +81,7 @@ def _get_stream_offsets(stream, stime, etime):
 class SeismicArray(object):
     """
     Class representing a seismic (or other) array.
+
     The SeismicArray class is a named container for an
     :class:`~obspy.core.inventory.Inventory` containing the components
     making up the array along with methods for array processing. It does not
@@ -91,18 +93,23 @@ class SeismicArray(object):
     :class:`~obspy.core.inventory.channel.Channel` objects, they do not need
     to represent actual seismic stations; their only required attribute is
     the location information.
+
     :param name: Array name.
     :type name: str
     :param inventory: Inventory of stations making up the array.
     :type inventory: :class:`~obspy.core.inventory.Inventory`
+
     .. rubric:: Basic Usage
+
     >>> from obspy.core.inventory import read_inventory
     >>> from obspy.signal.array_analysis import SeismicArray
     >>> inv = read_inventory('http://examples.obspy.org/agfainventory.xml')
     >>> array = SeismicArray('AGFA', inv)
     >>> print(array)
     Seismic Array 'AGFA' with 5 Stations, aperture: 0.06 km.
+
     .. rubric:: Coordinate conventions:
+
     * Right handed
     * X positive to east
     * Y positive to north
@@ -130,6 +137,7 @@ class SeismicArray(object):
     def inventory_cull(self, st):
         """
         Shrink array inventory to channels present in the given stream.
+
         Permanently remove from the array inventory all entries for stations or
         channels that do not have traces in the given
         :class:`~obspy.core.stream.Stream` st. This may be useful e.g. if data
@@ -139,9 +147,12 @@ class SeismicArray(object):
         and channel codes to the ones given in the trace headers. Furthermore,
         if a time range is specified for a channel, it will only be kept if it
         matches the time span of its corresponding trace.
+
         If you wish to keep the original inventory, make a copy first:
+
         >>> from copy import deepcopy #doctest: +SKIP
         >>> original_inventory = deepcopy(array.inventory) #doctest: +SKIP
+
         :param st: :class:`~obspy.core.stream.Stream` to which the array
             inventory should correspond.
         """
@@ -154,7 +165,7 @@ class SeismicArray(object):
                 for i, cha in reversed(list(enumerate(stn.channels))):
                     if ("{}.{}.{}.{}".format(netw.code, stn.code,
                                              cha.location_code, cha.code)
-                            not in stations_present):
+                        not in stations_present):
                         del stn.channels[i]
                         continue
                         # Also remove if it doesn't cover the time of the
@@ -183,6 +194,7 @@ class SeismicArray(object):
     def plot(self, projection="local", show=True, **kwargs):
         """
         Plot the geographical layout of the array.
+
         Shows all the array's stations as well as it's geometric center and its
         center of gravity.
         >>> from obspy.core.inventory import read_inventory
@@ -190,21 +202,27 @@ class SeismicArray(object):
         >>> inv = read_inventory('http://examples.obspy.org/agfainventory.xml')
         >>> array = SeismicArray('AGFA', inv)
         >>> array.plot()
+
         .. plot::
+
             from obspy.core.inventory import read_inventory
             from obspy.signal.array_analysis import SeismicArray
             inv = read_inventory('http://examples.obspy.org/agfainventory.xml')
             array = SeismicArray('AGFA', inv)
             array.plot()
+
         :type projection: str, optional
         :param projection: The map projection. Currently supported are:
+
             * ``"global"`` (Will plot the whole world.)
             * ``"ortho"`` (Will center around the mean lat/long.)
             * ``"local"`` (Will plot around local events)
+
             Defaults to ``"local"``
         :type show: bool
         :param show: Whether to show the figure after plotting or not. Can be
             used to do further customization of the plot before showing it.
+
         All other keyword arguments are passed to the
         :meth:`obspy.core.inventory.inventory.Inventory.plot` method.
         """
@@ -241,11 +259,13 @@ class SeismicArray(object):
         """
         Return a dictionary of latitude, longitude and absolute height
         [km] for each component in the array inventory.
+
         For every component in the array inventory (channels if available,
         stations otherwise), a SEED ID string with the format
         'network.station.location.channel', leaving any unknown parts blank, is
         assembled. This is one key for the returned dictionary, while the value
         is a dictionary of the component's coordinates.
+
         :return: A dictionary with keys: SEED IDs and values: dictionaries of
             'latitude', 'longitude' and 'absolute_height_in_km'.
         """
@@ -269,7 +289,7 @@ class SeismicArray(object):
                         {"latitude": float(station.latitude),
                          "longitude": float(station.longitude),
                          "absolute_height_in_km":
-                             float(station.elevation) / 1000.0}
+                         float(station.elevation) / 1000.0}
                     geo[item_code] = this_coordinates
                 else:
                     for channel in station:
@@ -281,8 +301,7 @@ class SeismicArray(object):
                             {"latitude": float(channel.latitude),
                              "longitude": float(channel.longitude),
                              "absolute_height_in_km":
-                                 float(
-                                     channel.elevation - channel.depth) / 1000.0}
+                              float(channel.elevation-channel.depth) / 1000.0}
                         geo[item_code] = this_coordinates
         return geo
 
@@ -290,6 +309,7 @@ class SeismicArray(object):
     def geometrical_center(self):
         """
         Return the geometrical centre as dictionary.
+
         The geometrical centre is the mid-point of the maximum array extent in
         each direction.
         """
@@ -300,14 +320,15 @@ class SeismicArray(object):
             "longitude": (extent["max_longitude"] +
                           extent["min_longitude"]) / 2.0,
             "absolute_height_in_km":
-                (extent["min_absolute_height_in_km"] +
-                 extent["max_absolute_height_in_km"]) / 2.0
+            (extent["min_absolute_height_in_km"] +
+             extent["max_absolute_height_in_km"]) / 2.0
         }
 
     @property
     def center_of_gravity(self):
         """
         Return the centre of gravity as a dictionary.
+
         The centre of gravity is calculated as the mean of the array stations'
         locations in each direction.
         """
@@ -322,11 +343,13 @@ class SeismicArray(object):
         """
         A dictionary of latitude, longitude and absolute height [km] values
         for each item in the array inventory.
+
         For every component in the array inventory (channels if available,
         stations otherwise), a SEED ID string with the format
         'network.station.location.channel', leaving any unknown parts blank, is
         assembled. This is one key for the returned dictionary, while the value
         is a dictionary of the component's coordinates.
+
         :return A dictionary with keys: SEED IDs and values: dictionaries of
             'latitude', 'longitude' and 'absolute_height_in_km'.
         """
@@ -336,6 +359,7 @@ class SeismicArray(object):
     def aperture(self):
         """
         Return the array aperture in kilometers.
+
         The array aperture is the maximum distance between any two stations in
         the array.
         """
@@ -385,14 +409,18 @@ class SeismicArray(object):
         """
         Return the array geometry as each components's offset relative to a
         given reference point, in km.
+
         The returned geometry is a nested dictionary with each component's SEED
         ID as key and a dictionary of its coordinates as value, similar to that
         given by :attr:`~obspy.signal.array_analysis.SeismicArray.geometry`,
         but with different coordinate values and keys.
+
         To obtain the x-y-z geometry in relation to, for example, the center of
         gravity, use:
+
         >>> array = SeismicArray('', inv) # doctest: +SKIP
         >>> array._get_geometry_xyz(**array.center_of_gravity) # doctest: +SKIP
+
         :param latitude: Latitude of reference origin.
         :param longitude: Longitude of reference origin.
         :param absolute_height_in_km: Elevation of reference origin.
@@ -423,6 +451,7 @@ class SeismicArray(object):
         kilometres relative to a given centre (uses geometric centre if not
         specified), and a pre-defined backazimuth. Returns nested dict of
         timeshifts at each slowness between sll and slm, with sls increment.
+
         :param sll: slowness x min (lower)
         :param slm: slowness x max (lower)
         :param sls: slowness step
@@ -451,8 +480,7 @@ class SeismicArray(object):
 
         for key, value in list(geom.items()):
             time_shifts = -slownesses / KM_PER_DEG * \
-                          (value["x"] * math.sin(baz) + value["y"] * math.cos(
-                              baz))
+                    (value["x"] * math.sin(baz) + value["y"] * math.cos(baz))
 
             if static3d:
                 try:
@@ -477,6 +505,7 @@ class SeismicArray(object):
         Returns timeshift table for the geometry of the current array, in
         kilometres relative to a given centre (uses geometric centre if not
         specified).
+
         :param sllx: slowness x min (lower)
         :param slly: slowness y min (lower)
         :param sls: slowness step
@@ -517,9 +546,7 @@ class SeismicArray(object):
                             " velocity")
                         inc = np.pi / 2.
                     time_shift_tbl[:, k, l] = sx * geometry[:, 0] + sy * \
-                                              geometry[:, 1] + geometry[:,
-                                                               2] * np.cos(
-                        inc) / vel_cor
+                        geometry[:, 1] + geometry[:, 2] * np.cos(inc) / vel_cor
             return time_shift_tbl
         # optimized version
         else:
@@ -563,7 +590,7 @@ class SeismicArray(object):
         elif isinstance(reference, dict):
             center_ = reference
             center_['absolute_height_in_km'] = (
-                    center_.pop('elevation') / 1000.0)
+                center_.pop('elevation') / 1000.0)
         else:
             msg = "Unrecognized value for 'reference' option: {}"
             raise ValueError(msg.format(reference))
@@ -738,7 +765,7 @@ class SeismicArray(object):
         header = {"network": "XX", "station": "YY", "location": "99",
                   "starttime": list(components.values())[0][0].stats.starttime,
                   "sampling_rate":
-                      list(components.values())[0][0].stats.sampling_rate,
+                  list(components.values())[0][0].stats.sampling_rate,
                   "channel": "ROZ",
                   "npts": len(d1)}
 
@@ -759,6 +786,7 @@ class SeismicArray(object):
                                 slx=(-10, 10), sly=(-10, 10), sls=0.5):
         """
         Slowness whitened power analysis.
+
         :param stream: Waveforms for the array processing.
         :type stream: :class:`obspy.core.stream.Stream`
         :param prefilter: Whether to bandpass data to selected frequency range
@@ -806,6 +834,7 @@ class SeismicArray(object):
                              sly=(-10, 10), sls=0.5):
         """
         Phase weighted stack analysis.
+
         :param stream: Waveforms for the array processing.
         :type stream: :class:`obspy.core.stream.Stream`
         :param prefilter: Whether to bandpass data to selected frequency range
@@ -900,6 +929,7 @@ class SeismicArray(object):
                     slx=(-10, 10), sly=(-10, 10), sls=0.5):
         """
         FK analysis.
+
         :param stream: Waveforms for the array processing.
         :type stream: :class:`obspy.core.stream.Stream`
         :param prefilter: Whether to bandpass data to selected frequency range
@@ -949,11 +979,15 @@ class SeismicArray(object):
                                plots=()):
         """
         Array analysis wrapper routine.
+
         :param stream: Waveforms for the array processing.
         :type stream: :class:`obspy.core.stream.Stream`
         :param method: Method used for the array analysis
-            (one of "FK": Frequency Wavenumber, "DLS": Delay and Sum,
-            "PWS": Phase Weighted Stack, "SWP": Slowness Whitened Power).
+            (one of "FK": Frequency Wavenumber,
+                    "CAPON": Capon's high resolution estimator,
+                    "DLS": Delay and Sum,
+                    "PWS": Phase Weighted Stack,
+                    "SWP": Slowness Whitened Power).
         :type method: str
         :param prefilter: Whether to bandpass data to selected frequency range
         :type prefilter: bool
@@ -987,7 +1021,7 @@ class SeismicArray(object):
         :rtype: :class:`~obspy.signal.array_analysis.BeamformerResult`
         """
         import matplotlib.pyplot as plt
-        if method not in ("FK", "DLS", "PWS", "SWP"):
+        if method not in ("FK", "CAPON", "DLS", "PWS", "SWP"):
             raise ValueError("Invalid method: ''" % method)
 
         if "slowness_baz" in plots:
@@ -1079,6 +1113,28 @@ class SeismicArray(object):
                 print("Total time in routine: %f\n" % (UTCDateTime() - start))
                 t, rel_power, abs_power, baz, slow = outarr.T
 
+            elif method == 'CAPON':
+                kwargs = dict(
+                    # slowness grid: X min, X max, Y min, Y max, Slow Step
+                    sll_x=sllx, slm_x=slmx, sll_y=slly, slm_y=slmy, sl_s=sls,
+                    # sliding window properties
+                    win_len=wlen, win_frac=wfrac,
+                    # frequency properties
+                    frqlow=frqlow, frqhigh=frqhigh, prewhiten=0,
+                    # restrict output
+                    store=dump,
+                    semb_thres=-1e9, vel_thres=-1e9, verbose=False,
+                    # use mlabday to be compatible with matplotlib
+                    timestamp='julsec', stime=starttime, etime=endtime,
+                    method=1, correct_3dplane=False, vel_cor=vel_corr,
+                    static3d=static3d)
+
+                # here we do the array processing
+                start = UTCDateTime()
+                outarr = self._covariance_array_processing(st_workon, **kwargs)
+                print("Total time in routine: %f\n" % (UTCDateTime() - start))
+                t, rel_power, abs_power, baz, slow = outarr.T
+
             else:
                 kwargs = dict(
                     # slowness grid: X min, X max, Y min, Y max, Slow Step
@@ -1124,14 +1180,14 @@ class SeismicArray(object):
             # now let's do the plotting
             if "slowness_baz" in plots:
                 plot_array_analysis(outarr, transff, sllx, slmx, slly, slmy,
-                                    sls,
-                                    filename_patterns, True, method, array_r,
-                                    st_workon, starttime, wlen, endtime)
+                                    sls, filename_patterns, True,
+                                    method, array_r, st_workon, starttime,
+                                    wlen, endtime)
             if "slowness_xy" in plots:
                 plot_array_analysis(outarr, transff, sllx, slmx, slly, slmy,
-                                    sls,
-                                    filename_patterns, False, method, array_r,
-                                    st_workon, starttime, wlen, endtime)
+                                    sls, filename_patterns, False, method,
+                                    array_r, st_workon, starttime, wlen,
+                                    endtime)
             plt.show()
             # Return the beamforming results to allow working more on them,
             # make other plots etc.
@@ -1176,6 +1232,7 @@ class SeismicArray(object):
                                      static3d=False, store=None):
         """
         Method for FK-Analysis/Capon
+
         :param stream: Stream object, the trace.stats dict like class must
             contain an :class:`~obspy.core.util.attribdict.AttribDict` with
             'latitude', 'longitude' (in degrees) and 'elevation' (in km), or
@@ -1391,13 +1448,12 @@ class SeismicArray(object):
                 csamp[:, 2] = np.cumsum(ampn)
                 ampw = np.zeros(n_freqs, dtype=csamp.dtype)
                 for k in range(3):
-                    ampw[int(ww / 2):int(n_freqs - ww / 2)] += (csamp[ww:, k] -
-                                                                csamp[:-ww,
-                                                                k]) / ww
+                    ampw[ww // 2:n_freqs - ww // 2] += \
+                        (csamp[ww:, k] - csamp[:-ww, k]) / ww
                 # Fill zero elements at start and end of array with closest
                 # non-zero value.
-                ampw[int(n_freqs - ww / 2):] = ampw[int(n_freqs - ww / 2 - 1)]
-                ampw[:int(ww / 2)] = ampw[int(ww / 2)]
+                ampw[n_freqs - ww // 2:] = ampw[n_freqs - ww // 2 - 1]
+                ampw[:ww // 2] = ampw[ww // 2]
                 ampw *= 1 / 3.
                 # Weights are 1/ampw unless ampw is very small, then 0.
                 weight = np.where(ampw > np.finfo(np.float).eps * 10.,
@@ -1473,20 +1529,20 @@ class SeismicArray(object):
         for i in range(num_win):
             for n in range(n_stats):
                 if not np.isnan(_alldata_z[n, i * nstep:i * nstep +
-                                                        nsamp]).any() \
+                                           nsamp]).any() \
                         and not np.isnan(_alldata_n[n, i * nstep:i * nstep +
-                                                                 nsamp]).any() \
+                                                    nsamp]).any() \
                         and not np.isnan(_alldata_e[n, i * nstep:i * nstep +
-                                                                 nsamp]).any():
+                                                    nsamp]).any():
                     # All data, tapered.
                     alldata_z[n, i, :] = _alldata_z[n, i * nstep:
-                                                       i * nstep + nsamp] * \
+                                                    i * nstep + nsamp] * \
                                          cosine_taper(nsamp)
                     alldata_n[n, i, :] = _alldata_n[n, i * nstep:
-                                                       i * nstep + nsamp] * \
+                                                    i * nstep + nsamp] * \
                                          cosine_taper(nsamp)
                     alldata_e[n, i, :] = _alldata_e[n, i * nstep:
-                                                       i * nstep + nsamp] * \
+                                                    i * nstep + nsamp] * \
                                          cosine_taper(nsamp)
                     nst[i] += 1
 
@@ -1517,11 +1573,11 @@ class SeismicArray(object):
         # for final Power Spectral Density output using half-sided spectrum,
         # traces are normalized by SQRT(fs*windowing-function factor*0.5)
         fcoeffz = np.fft.fft(alldata_z, n=nsamp, axis=-1) / \
-                  np.sqrt(fs * (cosine_taper(nsamp) ** 2).sum() * 0.5)
+            np.sqrt(fs * (cosine_taper(nsamp) ** 2).sum() * 0.5)
         fcoeffn = np.fft.fft(alldata_n, n=nsamp, axis=-1) / \
-                  np.sqrt(fs * (cosine_taper(nsamp) ** 2).sum() * 0.5)
+            np.sqrt(fs * (cosine_taper(nsamp) ** 2).sum() * 0.5)
         fcoeffe = np.fft.fft(alldata_e, n=nsamp, axis=-1) / \
-                  np.sqrt(fs * (cosine_taper(nsamp) ** 2).sum() * 0.5)
+            np.sqrt(fs * (cosine_taper(nsamp) ** 2).sum() * 0.5)
         fcoeffz = fcoeffz[:, :, index]
         fcoeffn = fcoeffn[:, :, index]
         fcoeffe = fcoeffe[:, :, index]
@@ -1605,7 +1661,7 @@ class SeismicArray(object):
             omega = 2 * math.pi * fr[f]
             for win in range(0, out_wins * win_average, win_average):
                 if any(nst[win:win + win_average] < n_min_stns) or any(
-                        nst[win:win + win_average] != nst[win]):
+                                nst[win:win + win_average] != nst[win]):
                     continue
                 sz = np.squeeze(fcoeffz[:, win, f])
                 sn = np.squeeze(fcoeffn[:, win, f])
@@ -1634,11 +1690,9 @@ class SeismicArray(object):
                     e_steere = e_steer.copy()
                     e_steern = e_steer.copy()
                     e_steere = (e_steere.T * np.array([ch[polarisation](azi)[0]
-                                                       for azi in range(
-                            len(theo_backazi))])).T
+                                for azi in range(len(theo_backazi))])).T
                     e_steern = (e_steern.T * np.array([ch[polarisation](azi)[1]
-                                                       for azi in range(
-                            len(theo_backazi))])).T
+                                for azi in range(len(theo_backazi))])).T
 
                     if polarisation in [0, 1]:
                         w = np.concatenate(
@@ -1647,7 +1701,7 @@ class SeismicArray(object):
                         wt = w.T.copy()
                         beamres[:, vel, int(win / win_average), f] = 1. / (
                                 nst[win] * nst[win]) * abs(
-                            (np.conjugate(w) * np.dot(r, wt).T).sum(1))
+                                (np.conjugate(w) * np.dot(r, wt).T).sum(1))
                         if coherency:
                             beamres[:, vel, int(win / win_average), f] /= \
                                 abs(np.sum(np.diag(r)))
@@ -1664,7 +1718,7 @@ class SeismicArray(object):
                             wt = w.T.copy()
                             res[:, vel, inc_angle] = 1. / (
                                     nst[win] * nst[win]) * abs(
-                                (np.conjugate(w) * np.dot(r, wt).T).sum(1))
+                                    (np.conjugate(w) * np.dot(r, wt).T).sum(1))
                             if coherency:
                                 res[:, vel, inc_angle] /= \
                                     abs(np.sum(np.diag(r)))
@@ -1681,7 +1735,7 @@ class SeismicArray(object):
                             wt = w.T.copy()
                             res[:, vel, inc_angle] = 1. / (
                                     nst[win] * nst[win]) * abs(
-                                (np.conjugate(w) * np.dot(r, wt).T).sum(1))
+                                    (np.conjugate(w) * np.dot(r, wt).T).sum(1))
                             if coherency:
                                 res[:, vel, inc_angle] /= \
                                     abs(np.sum(np.diag(r)))
@@ -1702,6 +1756,7 @@ class SeismicArray(object):
                                     coherency=False):
         """
         Do three-component beamforming following [Esmersoy1985]_.
+
         Three streams representing N, E, Z oriented components must be given,
         where the traces contained are from the different stations. The
         traces must all have same length and start/end times (to within
@@ -1717,6 +1772,7 @@ class SeismicArray(object):
         traces used (or more, the inventory is then non-permanently 'pruned').
         NB all channels of a station must be located in the same location for
         this method.
+
         :param stream_n: Stream of all traces for the North component.
         :param stream_e: Stream of East components.
         :param stream_z: Stream of Up components. Will be ignored for Love
@@ -1868,7 +1924,7 @@ class SeismicArray(object):
                 w = np.exp(-1j * steering * omega * u[vel])
                 wt = w.T.copy()
                 beamres[:, vel] = 1. / (
-                        steering.shape[1] * steering.shape[1]) * abs(
+                    steering.shape[1] * steering.shape[1]) * abs(
                     (np.conjugate(w) * np.dot(r, wt).T).sum(1))
             fig = plt.figure()
             ax = fig.add_subplot(1, 1, 1, projection='polar')
@@ -1893,6 +1949,7 @@ class SeismicArray(object):
     def plot_transfer_function_wavenumber(self, klim, kstep):
         """
         Plot array transfer function as function of wavenumber.
+
         :param klim: Maximum wavenumber (symmetric about zero in
          x and y directions).
         :param kstep: Step in wavenumber.
@@ -1908,6 +1965,7 @@ class SeismicArray(object):
                                             freq_max, freq_step):
         """
         Plot array transfer function as function of slowness and frequency.
+
         :param slim: Maximum slowness (symmetric about zero in x and y
          directions).
         :param sstep: Step in slowness.
@@ -1927,6 +1985,7 @@ class SeismicArray(object):
     def _plot_transfer_function_helper(transff, lim, step):
         """
         Plot array transfer function.
+
         :param transff: Transfer function to plot.
         :param lim: Maximum value of slowness/wavenumber.
         :param step: Step in slowness/wavenumber.
@@ -1943,6 +2002,7 @@ class SeismicArray(object):
     def array_transfer_function_wavenumber(self, klim, kstep):
         """
         Return array transfer function as a function of wavenumber difference.
+
         :param klim: Either a float to use symmetric limits for wavenumber
             differences or the tuple (kxmin, kxmax, kymin, kymax).
         :param kstep: Step in wavenumber.
@@ -1954,6 +2014,7 @@ class SeismicArray(object):
         """
         Return array transfer function as a function of slowness difference
         and frequency.
+
         :param slim: Either a float to use symmetric limits for slowness
             differences or the tuple (sxmin, sxmax, symin, symax).
         :param sstep: Step in frequency.
@@ -1970,6 +2031,7 @@ class SeismicArray(object):
         """
         Return array transfer function as function of wavenumber or slowness
         and frequency.
+
         :param plim: Either a float to use symmetric limits for slowness/
             wavenumber differences or the tuple (pxmin, pxmax, sxmin, sxmax).
         :param pstep: Step in wavenumber/slowness.
@@ -2036,6 +2098,7 @@ class SeismicArray(object):
                      correct_3dplane=False, static3d=False, vel_cor=4.):
         """
         Method for Delay and Sum/Phase Weighted Stack/Whitened Slowness Power
+
         :param stream: Stream object.
         :param sll_x: slowness x min (lower)
         :param slm_x: slowness x max
@@ -2154,11 +2217,11 @@ class SeismicArray(object):
                                                                shifted)
                                 beam += 1. / nstat * np.power(
                                     np.abs(shifted), 1. / nthroot) * \
-                                        shifted / np.abs(shifted)
+                                    shifted / np.abs(shifted)
                             except IndexError:
                                 break
                         beam = np.power(np.abs(beam), nthroot) * \
-                               beam / np.abs(beam)
+                            beam / np.abs(beam)
                         bs = np.sum(beam * beam)
                         abspow_map[x, y] = bs / singlet
                         if abspow_map[x, y] > max_beam:
@@ -2175,7 +2238,7 @@ class SeismicArray(object):
                                                 fs + 0.5)
                             try:
                                 shifted = sp.signal.hilbert(stream[i].data[
-                                                            s + offset: s + nsamp + offset])
+                                    s + offset: s + nsamp + offset])
                                 if len(shifted) < nsamp:
                                     shifted = np.pad(
                                         shifted, (0, nsamp - len(shifted)),
@@ -2190,7 +2253,7 @@ class SeismicArray(object):
                             s = spoint[i] + int(
                                 time_shift_table[i, x, y] * fs + 0.5)
                             shifted = stream[i].data[
-                                      s + offset: s + nsamp + offset]
+                                s + offset: s + nsamp + offset]
                             singlet += 1. / nstat * np.sum(shifted * shifted)
                             beam += 1. / nstat * shifted * np.power(coh,
                                                                     nthroot)
@@ -2326,12 +2389,12 @@ class SeismicArray(object):
                         time_shift_table[station][_i] * fs + 0.5)
                     shifted = tr.data[s: s + ndat]
                     singlet += 1. / len(stream) * np.sum(shifted * shifted)
-                    beams[_i] += 1. / len(stream) * np.power(np.abs(shifted),
-                                                             1. / nthroot) * \
-                                 shifted / np.abs(shifted)
+                    beams[_i] += 1. / len(stream) * \
+                        np.power(np.abs(shifted), 1. / nthroot) * \
+                        shifted / np.abs(shifted)
 
                 beams[_i] = np.power(np.abs(beams[_i]), nthroot) * \
-                            beams[_i] / np.abs(beams[_i])
+                    beams[_i] / np.abs(beams[_i])
 
                 bs = np.sum(beams[_i] * beams[_i])
                 bs /= singlet
@@ -2402,6 +2465,7 @@ class SeismicArray(object):
     def _correct_with_3dplane(self, geometry):
         """
         Correct a given array geometry with a best-fitting plane.
+
         :type geometry: dict
         :param geometry: Nested dictionary of stations, as returned for example
             by :attr:`geometry` or :meth:`_get_geometry_xyz`.
@@ -2429,16 +2493,13 @@ class SeismicArray(object):
         n = v[:, -1]
         result[:, 0] = (geometry[:, 0] - n[0] * (
                 n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
-                geometry[:, 2]) / (
-                                n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
+                geometry[:, 2]) / (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
         result[:, 1] = (geometry[:, 1] - n[1] * (
                 n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
-                geometry[:, 2]) / (
-                                n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
+                geometry[:, 2]) / (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
         result[:, 2] = (geometry[:, 2] - n[2] * (
                 n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
-                geometry[:, 2]) / (
-                                n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
+                geometry[:, 2]) / (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
         geometry = result[:]
         # print("Best fitting plane-coordinates :\n", geometry)
 
@@ -2482,14 +2543,13 @@ class SeismicArray(object):
         cmap = plt.cm.get_cmap('jet')
 
         stream.traces = sorted(stream.traces,
-                               key=lambda x: x.stats.coordinates.distance)[
-                        ::-1]
+                               key=lambda x: x.stats.coordinates.distance)[::-1]
         # One color for each trace.
         colors = [cmap(_i) for _i in np.linspace(0, 1, len(stream))]
 
         # Relative event times.
         times_array = stream[0].times() + \
-                      (stream[0].stats.starttime - event_time)
+            (stream[0].stats.starttime - event_time)
 
         distances = [tr.stats.coordinates.distance for tr in stream]
         min_distance = min(distances)
@@ -2536,8 +2596,8 @@ class SeismicArray(object):
 
                 if min_tt_time >= times_array[-1] or \
                         max_tt_time <= times_array[0] or \
-                        (max_distance - min_distance) < 0.8 * (
-                        dist_max - dist_min):
+                        (max_distance - min_distance) < \
+                        0.8 * (dist_max - dist_min):
                     continue
                 ttime = ttimes[key]
                 dist = distances[key]
@@ -2572,8 +2632,7 @@ class SeismicArray(object):
         self._attach_coords_to_stream(stream, event)
 
         stream.traces = sorted(stream.traces,
-                               key=lambda x: x.stats.coordinates.distance)[
-                        ::-1]
+                               key=lambda x: x.stats.coordinates.distance)[::-1]
         model = TauPyModel(model=vel_model)
 
         for tr in stream:
