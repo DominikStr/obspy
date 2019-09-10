@@ -19,7 +19,7 @@ from obspy.core.util.testing import ImageComparison
 from obspy.signal.array_analysis import SeismicArray
 from obspy.signal.array_analysis.seismic_array import _get_stream_offsets
 from obspy.signal.util import util_lon_lat
-from obspy import read
+from obspy import read, read_events
 from obspy.core.inventory import read_inventory
 from obspy.core.inventory.channel import Channel
 from obspy.core.inventory.station import Station
@@ -44,32 +44,44 @@ class SeismicArrayTestCase(unittest.TestCase):
             Note it's usually lat-lon in other applications.
             """
             if sys == 'xy':
-                coords_lonlat = [util_lon_lat(0, 0, stn[0], stn[1])
+                coords_lonlat = [list(util_lon_lat(0, 0, stn[0], stn[1]))
                                  for stn in coords]
+                for i, cor in enumerate(coords_lonlat):
+                    cor.append(coords[i][2])
             else:
                 coords_lonlat = coords
 
             if include_cha:
                 chas = [Channel(str(_i), str(_i), coords_lonlat[_i][1],
-                                coords_lonlat[_i][0], 0, 0)  # flat!
+                                coords_lonlat[_i][0],
+                                coords_lonlat[_i][2] * 1000, 0)
                         for _i in range(len(coords_lonlat))]
                 stns = [Station(str(_i), coords_lonlat[_i][1],
-                                coords_lonlat[_i][0], 0, channels=[chas[_i]])
+                                coords_lonlat[_i][0],
+                                coords_lonlat[_i][2] * 1000,
+                                channels=[chas[_i]])
                         for _i in range(len(coords_lonlat))]
             else:
                 stns = [Station(str(_i), coords_lonlat[_i][1],
-                                coords_lonlat[_i][0], 0)  # flat!
+                                coords_lonlat[_i][0],
+                                coords_lonlat[_i][2] * 1000)
                         for _i in range(len(coords_lonlat))]
             testinv = Inventory([Network("testnetwork", stations=stns)],
                                 'testsender')
             return SeismicArray('testarray', inventory=testinv)
 
         # Set up an array for geometry tests.
-        geometry_coords = [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]]
+        geometry_coords = [[0, 0, 0], [2, 0, 0], [1, 1, 0],
+                           [0, 2, 0], [2, 2, 0]]
         self.geometry_array = create_simple_array(geometry_coords, 'longlat')
         self.geometry_array_w_chas = create_simple_array(geometry_coords,
                                                          'longlat',
                                                          include_cha=True)
+        # Set up simple array with heights to test 3D correction
+        geometry_coords_w_h = [[0, 0, 0], [2, 0, 1], [1, 1, 0.5],
+                               [0, 2, 0], [2, 2, 1]]
+        self.array_3d = create_simple_array(geometry_coords_w_h,
+                                            'longlat')
 
         # Set up the test array for the _covariance_array_processing,
         # stream_offset and array_rotation_strain tests.
@@ -154,6 +166,122 @@ class SeismicArrayTestCase(unittest.TestCase):
                          {'absolute_height_in_km': 0.0,
                           'latitude': 1.0, 'longitude': 1.0})
 
+    def test_apertur(self):
+        self.assertAlmostEqual(self.geometry_array.aperture, 313.7, 0)
+
+    def test_extend(self):
+        extend = {'min_latitude': 0.0, 'max_latitude': 2.0,
+                  'min_longitude': 0.0, 'max_longitude': 2.0,
+                  'min_absolute_height_in_km': 0.0,
+                  'max_absolute_height_in_km': 0.0}
+        self.assertTrue(self.geometry_array.extent, extend)
+
+    def test__coordinate_values(self):
+        coordinate_lists = ([0.0, 0.0, 1.0, 2.0, 2.0],
+                            [0.0, 2.0, 1.0, 0.0, 2.0],
+                            [0.0, 0.0, 0.0, 0.0, 0.0])
+        self.assertTrue(self.geometry_array._coordinate_values(),
+                        coordinate_lists)
+
+    def test__get_timeshift_baz(self):
+        # test 2D calculation
+        ref_table_2d = {None: np.array([-2, -1,  0,  1,  2]),
+                        'testnetwork.0..':
+                            np.array([-2.82208081, -1.4110404,
+                                      -0., 1.4110404, 2.82208081]),
+                        'testnetwork.1..':
+                            np.array([0.00941771, 0.00470886,
+                                      0., -0.00470886, -0.00941771]),
+                        'testnetwork.2..': np.array([0.,  0.,  0., -0., -0.]),
+                        'testnetwork.3..':
+                            np.array([-0.00899221, -0.00449611,
+                                      -0., 0.00449611, 0.00899221]),
+                        'testnetwork.4..':
+                            np.array([2.82165531, 1.41082765,
+                                      0., -1.41082765, -2.82165531])}
+
+        tshft_table_2d = self.geometry_array._get_timeshift_baz(-2, 2, 1, 45,
+                                                     latitude=1.0,
+                                                     longitude=1.0,
+                                                     absolute_height_in_km=0.0,
+                                                     static3d=False,
+                                                     vel_cor=4.0)
+
+        for key, value in list(tshft_table_2d.items()):
+            self.assertTrue(np.allclose(value, ref_table_2d[key]))
+
+        # test 2D calculation
+        ref_table_3d = {None: np.array([-2, -1, 0, 1, 2]),
+                        'testnetwork.0..':
+                            np.array([-2.69740474, -1.28612131, 0.125,
+                                      1.5359595, 2.94675688]),
+                        'testnetwork.1..':
+                            np.array([-0.11525835, -0.12021024, -0.125,
+                                      -0.12962795, -0.13409378]),
+                        'testnetwork.2..':
+                            np.array([0.,  0.,  0.,  0.,  0.]),
+                        'testnetwork.3..':
+                            np.array([0.11568385, 0.12042299, 0.125,
+                                      0.1294152, 0.13366828]),
+                        'testnetwork.4..':
+                            np.array([2.69697924, 1.28590856, -0.125,
+                                      -1.53574675, -2.94633138])}
+        tshft_table_3d = self.array_3d._get_timeshift_baz(-2, 2, 1, 45,
+                                                          latitude=1.0,
+                                                          longitude=1.0,
+                                                          absolute_height_in_km=0.5,
+                                                          static3d=True,
+                                                          vel_cor=4.0)
+        for key, value in list(tshft_table_3d.items()):
+            self.assertTrue(np.allclose(value, ref_table_3d[key]))
+
+    def test__get_timeshift(self):
+        ref_table_2d = [[[-1.9955125, -2.989939, -3.9843657],
+                         [-2.9965985, -3.991025, -4.9854517],
+                         [-3.9976842, -4.9921107, -5.9865375]],
+                        [[0.00665933, -0.9877672, -1.9821938],
+                         [1.0077453, 0.01331866, -0.9811079],
+                         [2.008831, 1.0144045, 0.01997799]],
+                        [[0., 0., 0.],
+                         [0., 0., 0.],
+                         [0., 0., 0.]],
+                        [[-0.00635846, 0.9880681, 1.9824947],
+                         [-1.0071435, -0.01271691, 0.98170966],
+                         [-2.0079286, -1.0135019, -0.01907537]],
+                        [[1.9952116, 2.989638, 3.9840648],
+                         [2.9959967, 3.9904232, 4.98485],
+                         [3.9967816, 4.991208, 5.985635]]]
+        tshft_table_2d = self.geometry_array._get_timeshift(1, 1, 1, 3, 3,
+                                                            latitude=None,
+                                                            longitude=None,
+                                                            absolute_height=None,
+                                                            vel_cor=4.,
+                                                            static3d=False)
+        self.assertTrue(np.allclose(ref_table_2d, tshft_table_2d))
+
+        ref_table_3d = [[[-1.8706744, -2.865344, -3.860177],
+                         [-2.8720033, -3.8666737, -4.8615074],
+                         [-3.8734956, -4.868167, -5.863002]],
+                        [[-0.11817881, -1.1123621, -2.1063824],
+                         [0.8831503, -0.11103263, -1.105052],
+                         [1.8846426,  0.89046043, -0.10355763]],
+                        [[0.,  0.,  0.],
+                         [0.,  0.,  0.],
+                         [0.,  0.,  0.]],
+                        [[0.11847968,  1.112663,  2.1066833],
+                         [-0.8825485,  0.11163438,  1.1056538],
+                         [-1.88374, -0.88955784,  0.10446025]],
+                        [[1.8703735,  2.8650432,  3.8598762],
+                         [2.8714018,  3.866072,  4.8609056],
+                         [3.8725932,  4.8672643,  5.862099 ]]]
+        tshft_table_3d = self.array_3d._get_timeshift(1, 1, 1, 3, 3,
+                                                      latitude=None,
+                                                      longitude=None,
+                                                      absolute_height=None,
+                                                      vel_cor=4.,
+                                                      static3d=True)
+        self.assertTrue(np.allclose(ref_table_3d, tshft_table_3d))
+
     def test_inventory_cull(self):
         time = UTCDateTime('2016-04-05T06:44:0.0Z')
         # Method should work even when traces do not cover same times.
@@ -209,8 +337,8 @@ class SeismicArrayTestCase(unittest.TestCase):
                                        np.sin(baz) * self.fk_testcoords[:, 0]))
         trl = []
         for i in range(len(self.fk_testcoords)):
-            tr = Trace(coherent_wave[-(np.min(dt) - 1) +
-                                     dt[i]:-(np.max(dt) + 1) + dt[i]].copy())
+            tr = Trace(coherent_wave[int(-(np.min(dt) - 1) + dt[i]):
+                                     int(-(np.max(dt) + 1) + dt[i])].copy())
             tr.stats.sampling_rate = df
             # lowpass random signal to f_nyquist / 2
             tr.filter("lowpass", freq=df / 4.)

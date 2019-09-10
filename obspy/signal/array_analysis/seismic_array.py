@@ -117,6 +117,8 @@ class SeismicArray(object):
     """
 
     def __init__(self, name, inventory):
+        if not isinstance(name, str):
+            raise TypeError("Name must be a string.")
         self.name = name
         if not isinstance(inventory, Inventory):
             raise TypeError("Inventory must be an ObsPy Inventory.")
@@ -165,7 +167,7 @@ class SeismicArray(object):
                 for i, cha in reversed(list(enumerate(stn.channels))):
                     if ("{}.{}.{}.{}".format(netw.code, stn.code,
                                              cha.location_code, cha.code)
-                        not in stations_present):
+                            not in stations_present):
                         del stn.channels[i]
                         continue
                         # Also remove if it doesn't cover the time of the
@@ -469,11 +471,10 @@ class SeismicArray(object):
         """
         geom = self._get_geometry_xyz(latitude, longitude,
                                       absolute_height_in_km)
-
         baz = math.pi * baz / 180.0
 
         time_shift_tbl = {}
-        slownesses = np.arange(sll, slm, sls)
+        slownesses = np.arange(sll, slm + sls, sls)
         # we have to bring slowness (ray based coordinate system) and
         # baz (oposite direction) together -slowness
         time_shift_tbl[None] = slownesses
@@ -481,7 +482,6 @@ class SeismicArray(object):
         for key, value in list(geom.items()):
             time_shifts = -slownesses / KM_PER_DEG * \
                     (value["x"] * math.sin(baz) + value["y"] * math.cos(baz))
-
             if static3d:
                 try:
                     inc = np.arcsin(vel_cor * slownesses / KM_PER_DEG)
@@ -528,7 +528,6 @@ class SeismicArray(object):
                                       absolute_height)
 
         geometry = self._geometry_dict_to_array(geom)
-
         if static3d:
             nstat = len(geometry)
             time_shift_tbl = np.empty((nstat, grdpts_x, grdpts_y),
@@ -658,21 +657,6 @@ class SeismicArray(object):
                 minmax = [min(slownesses[0], data_minmax[0]),
                           max(slownesses[-1], data_minmax[1])]
                 ax.set_ylim(*minmax)
-
-            #                for i, (beam, slowness) in enumerate(zip(beams, slownesses)):
-            #                    if i == beam_max:
-            #                        color = "r"
-            #                        zorder = 2
-            #                    else:
-            #                        color = "k"
-            #                        zorder = 1
-            #                    ax.plot(t, slowness + scale * beam,
-            #                            color, zorder=zorder)
-            #
-            #                ax.set_xlim(t[0], t[-1])
-            #                data_minmax = ax.yaxis.get_data_interval()
-            #                minmax = [min(slownesses[0], data_minmax[0]), max(slownesses[-1], data_minmax[1])]
-            #                ax.set_ylim(*minmax)
 
             elif plot == 'density':
                 extent = (t[0] - delta * 0.5, t[-1] + delta * 0.5,
