@@ -740,28 +740,22 @@ class SeismicArray(object):
             raise ValueError("starttime, npts, and sampling rate must be "
                              "identical for all traces.")
 
-        stations = ["%s.%s" % (_i.stats.network, _i.stats.station)
+        stations = ["%s.%s.%s.%s" % (_i.stats.network, _i.stats.station,
+                                     _i.stats.location, _i.stats.channel)
                     for _i in list(components.values())[0]]
         for station in stations:
             if station not in geo:
                 raise ValueError("No coordinates known for station '%s'" %
                                  station)
 
-        array_coords = np.ndarray(shape=(len(geo), 3))
-        for _i, tr in enumerate(list(components.values())[0]):
-            station = "%s.%s" % (tr.stats.network, tr.stats.station)
-            # todo: This is the same as self.geometry_xyz, isn't it?
-            # not exactly: self.geometry_xyz returns a nested dict
-            self._get_geometry_xyz()
-            x, y = util_geo_km(longitude, latitude,
-                               geo[station]["longitude"],
-                               geo[station]["latitude"])
-            z = absolute_height_in_km
-            array_coords[_i][0] = x * 1000.0
-            array_coords[_i][1] = y * 1000.0
-            array_coords[_i][2] = z * 1000.0
+        array_coords = self._geometry_dict_to_array(
+            self._get_geometry_xyz(latitude,
+                                   longitude,
+                                   absolute_height_in_km))[::3]
 
-        subarray = np.arange(len(geo))
+        subarray = np.arange(len(geo)/3)
+        # integer is needed for fancy indexing
+        subarray = np.array(subarray, dtype=int)
 
         tr = []
         for _i, component in enumerate(["Z", "N", "E"]):
