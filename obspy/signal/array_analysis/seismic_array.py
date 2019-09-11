@@ -678,7 +678,38 @@ class SeismicArray(object):
 
     def derive_rotation_from_array(self, stream, vp, vs, sigmau, latitude,
                                    longitude, absolute_height_in_km=0.0):
-        # todo: what does this do??
+        """
+        Wrapper for the Function
+        :class:`~obspy.signal.array_analysis.array_rotation_strain.array_rotation_strain`.
+        Returns rotations and strains calculations from array measurements in a
+        structured way and prepossesses the input.
+        :param stream: Stream containing all traces of the array.
+        :type stream: :class:`~obspy.core.stream.Stream`.
+        :param vp: P wave speed in the soil under the array (km/s).
+        :param vs: S wave speed in the soil under the array Note - vp and vs
+        may be any unit (e.g. miles/week), and this unit need not be related to
+        the units of the station coordinates or ground motions, but the
+        units of vp and vs must be the SAME because only their ratio is used.
+        :param sigmau: Standard deviation (NOT VARIANCE) of ground noise,
+            corresponds to sigma-sub-u in S95 lines above eqn (A5).
+            NOTE: This may be entered as a scalar, vector, or matrix!
+            * If sigmau is a scalar, it will be used for all components of all
+              stations.
+            * If sigmau is a 1D array of length Na, sigmau[i] will be the noise
+              assigned to all components of the station corresponding to
+              array_coords[i,:]
+            * If sigmau is a 2D array of dimension  Na x 3, then sigmau[i,j] is
+              used as the noise of station i, component j.
+            In all cases, this routine assumes that the noise covariance
+            between different stations and/or components is zero.
+        :type sigmau: float or :class:`numpy.ndarray`
+        :param latitude: Latitude of reference point.
+        :param longitude: Longitude of reference point.
+        :param absolute_height_in_km: Absolute height of reference point (km).
+        :return: Rotated :class:`~obspy.core.stream.Stream`. and output of
+         :class:`~obspy.signal.array_analysis.array_rotation_strain.array_rotation_strain`.
+         which contains the rotation and strain parameters in a dictionary.
+        """
         geo = self.geometry
 
         components = collections.defaultdict(list)
@@ -720,7 +751,8 @@ class SeismicArray(object):
         for _i, tr in enumerate(list(components.values())[0]):
             station = "%s.%s" % (tr.stats.network, tr.stats.station)
             # todo: This is the same as self.geometry_xyz, isn't it?
-
+            # not exactly: self.geometry_xyz returns a nested dict
+            self._get_geometry_xyz()
             x, y = util_geo_km(longitude, latitude,
                                geo[station]["longitude"],
                                geo[station]["latitude"])
@@ -1058,9 +1090,6 @@ class SeismicArray(object):
         # actually represented in the traces are kept in the inventory.
         # Otherwise self.geometry and the xyz geometry arrays will have more
         # entries than the stream.
-        # Todo: if inventory_cull becomes an inventory method, change this to
-        # inv_workon = copy.deepcopy(self.inventory)
-        # and use that instead to avoid the try ... finally.
         invbkp = copy.deepcopy(self.inventory)
         self.inventory_cull(st_workon)
         if array_r:
