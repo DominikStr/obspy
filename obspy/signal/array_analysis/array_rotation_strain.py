@@ -52,9 +52,9 @@ def array_rotation_strain(subarray, ts1, ts2, ts3, vp, vs, array_coords,
         velocity, acceleration, jerk, etc.  See the "Discussion of input and
         output units" below.
     :type ts2: numpy.ndarray
-    :param ts2: Aame as ts1, but for the x2 component of motion.
+    :param ts2: Same as ts1, but for the x2 component of motion.
     :type ts3: numpy.ndarray
-    :param ts3: Aame as ts1, but for the x3 (UP or DOWN) component of
+    :param ts3: Same as ts1, but for the x3 (UP or DOWN) component of
         motion.
     :type sigmau: float or :class:`numpy.ndarray`
     :param sigmau: Standard deviation (NOT VARIANCE) of ground noise,

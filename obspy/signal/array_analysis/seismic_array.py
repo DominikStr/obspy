@@ -747,7 +747,8 @@ class SeismicArray(object):
             if station not in geo:
                 raise ValueError("No coordinates known for station '%s'" %
                                  station)
-
+        # every third entry because every coordinate is represented three
+        # times due to the three directions
         array_coords = self._geometry_dict_to_array(
             self._get_geometry_xyz(latitude,
                                    longitude,

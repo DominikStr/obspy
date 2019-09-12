@@ -475,25 +475,186 @@ class SeismicArrayTestCase(unittest.TestCase):
         np.testing.assert_array_almost_equal(out.max_rel_power, 1.22923997,
                                              decimal=8)
 
-    def test_plot_radial_transfer_function(self):
-        """
-        Tests the plotting of radial array transfer functions.
-        """
-        arr = SeismicArray('pfield', inventory=read_inventory(
-            os.path.join(self.path, 'pfield_inv_for_instaseis.xml')))
-        with ImageComparison(self.path_images, "radialtransferfunc.png") as ic:
-            arr.plot_radial_transfer_function(0, 0.6, 0.05, [0.2])
-            plt.savefig(ic.name)
+    def test_derive_rotation_from_array(self):
+        # Setup
+        array_coords = np.array([[0.0, 0.0, 0.0],
+                                 [-5.0, 7.0, 0.0],
+                                 [5.0, 7.0, 0.0],
+                                 [10.0, 0.0, 0.0],
+                                 [5.0, -7.0, 0.0],
+                                 [-5.0, -7.0, 0.0],
+                                 [-10.0, 0.0, 0.0]])
 
-    def test_array_plotting(self):
-        """
-        Tests the plotting of arrays.
-        """
-        arr = SeismicArray('pfield', inventory=read_inventory(
-            os.path.join(self.path, 'pfield_inv_for_instaseis.xml')))
-        with ImageComparison(self.path_images, "seismic_array_map.png") as ic:
-            arr.plot()
-            plt.savefig(ic.name)
+        stations = []
+        for i, cor in enumerate(array_coords):
+            sta = Station('S%d' % i, cor[0], cor[1], cor[2],
+                          channels=[Channel('C%dN' % i, '', cor[0], cor[1],
+                                            cor[2], 0),
+                                    Channel('C%dE' % i, '', cor[0], cor[1],
+                                            cor[2], 0),
+                                    Channel('C%dZ' % i, '', cor[0], cor[1],
+                                            cor[2], 0)])
+            stations.append(sta)
+
+        rotnet = Network('N', stations=stations)
+        rotinv = Inventory(networks=[rotnet])
+        array = SeismicArray(name='Rot_Array', inventory=rotinv)
+
+        # array_coords_km is needed to compute the test results, array_coords
+        # is used as input for the derive_rotation_from_array method
+        array_coords_km = array._geometry_dict_to_array(
+            array._get_geometry_xyz(0, 0, 0))[::3]
+        array_coords = array._geometry_dict_to_array(array.geometry)[::3]
+
+        ts1 = np.empty((1000, 7))
+        ts2 = np.empty((1000, 7))
+        ts3 = np.empty((1000, 7))
+        ts1.fill(np.NaN)
+        ts2.fill(np.NaN)
+        ts3.fill(np.NaN)
+        sigmau = 0.0001
+        vp = 1.93
+        vs = 0.326
+
+        # Tests function array_rotation_strain with synthetic data with pure
+        # rotation and no strain
+
+        rotx = 0.00001 * np.exp(-1 * np.square(np.linspace(-2, 2, 1000))) * \
+               np.sin(np.linspace(-30 * np.pi, 30 * np.pi, 1000))
+        roty = 0.00001 * np.exp(-1 * np.square(np.linspace(-2, 2, 1000))) * \
+               np.sin(np.linspace(-20 * np.pi, 20 * np.pi, 1000))
+        rotz = 0.00001 * np.exp(-1 * np.square(np.linspace(-2, 2, 1000))) * \
+               np.sin(np.linspace(-10 * np.pi, 10 * np.pi, 1000))
+
+        for stat in range(7):
+            for t in range(1000):
+                ts1[t, stat] = -1. * array_coords_km[stat, 1] * rotz[t]
+                ts2[t, stat] = array_coords_km[stat, 0] * rotz[t]
+                ts3[t, stat] = array_coords_km[stat, 1] * rotx[t] - \
+                               array_coords_km[stat, 0] * roty[t]
+
+        traces = []
+        for i, cor in enumerate(array_coords):
+            traces.append(Trace(ts2[:, i], header={'network': 'N',
+                                                   'location': '',
+                                                   'station': 'S%d' % i,
+                                                   'channel': 'C%dN' % i}))
+            traces.append(Trace(ts3[:, i], header={'network': 'N',
+                                                   'location': '',
+                                                   'station': 'S%d' % i,
+                                                   'channel': 'C%dE' % i}))
+            traces.append(Trace(ts1[:, i], header={'network': 'N',
+                                                   'location': '',
+                                                   'station': 'S%d' % i,
+                                                   'channel': 'C%dZ' % i}))
+        st = Stream(traces)
+
+        st_out, out = array.derive_rotation_from_array(st, vp, vs, sigmau,
+                                                       0, 0, 0)
+
+        # test for equality
+        np.testing.assert_array_almost_equal(rotx, st_out[0].data, decimal=12)
+        np.testing.assert_array_almost_equal(roty, st_out[1].data, decimal=12)
+        np.testing.assert_array_almost_equal(rotz, st_out[2].data, decimal=12)
+        np.testing.assert_array_almost_equal(np.zeros(1000), out['ts_s'],
+                                             decimal=15)
+        np.testing.assert_array_almost_equal(np.zeros(1000), out['ts_d'],
+                                             decimal=15)
+        np.testing.assert_array_almost_equal(np.zeros(1000), out['ts_m'],
+                                             decimal=12)
+
+        # Tests function array_rotation_strain with synthetic data with pure
+        # dilation and no rotation or shear strain
+
+        eta = 1 - 2 * vs ** 2 / vp ** 2
+
+        dilation = .00001 * np.exp(
+            -1 * np.square(np.linspace(-2, 2, 1000))) * \
+                   np.sin(np.linspace(-40 * np.pi, 40 * np.pi, 1000))
+
+        for stat in range(7):
+            for t in range(1000):
+                ts1[t, stat] = array_coords_km[stat, 0] * dilation[t]
+                ts2[t, stat] = array_coords_km[stat, 1] * dilation[t]
+                ts3[t, stat] = array_coords_km[stat, 2] * dilation[t]
+
+        st_out, out = array.derive_rotation_from_array(st, vp, vs, sigmau,
+                                                    0, 0, 0)
+
+        # remember free surface boundary conditions!
+        #         # see Spudich et al, 1995, (A2)
+        np.testing.assert_array_almost_equal(dilation * (2 - 2 * eta),
+                                             out['ts_d'], decimal=12)
+        np.testing.assert_array_almost_equal(dilation * 2, out['ts_dh'],
+                                             decimal=12)
+        np.testing.assert_array_almost_equal(
+            abs(dilation * .5 * (1 + 2 * eta)), out['ts_s'], decimal=12)
+        np.testing.assert_array_almost_equal(np.zeros(1000), out['ts_sh'],
+                                             decimal=12)
+        np.testing.assert_array_almost_equal(np.zeros(1000), st_out[0],
+                                             decimal=15)
+        np.testing.assert_array_almost_equal(np.zeros(1000), st_out[1],
+                                             decimal=15)
+        np.testing.assert_array_almost_equal(np.zeros(1000), st_out[2],
+                                             decimal=15)
+        np.testing.assert_array_almost_equal(np.zeros(1000), out['ts_m'],
+                                             decimal=12)
+
+        # Tests function array_rotation_strain with synthetic data with pure
+        # horizontal shear strain, no rotation or dilation.
+
+        shear_strainh = .00001 * np.exp(
+            -1 * np.square(np.linspace(-2, 2, 1000))) * \
+                        np.sin(np.linspace(-10 * np.pi, 10 * np.pi, 1000))
+
+        ts3 = np.zeros(1000)
+        for tr_z in st[1::3]:
+            tr_z.data = np.zeros(1000)
+
+        for stat in range(7):
+            for t in range(1000):
+                ts1[t, stat] = array_coords_km[stat, 1] * shear_strainh[t]
+                ts2[t, stat] = array_coords_km[stat, 0] * shear_strainh[t]
+
+        st_out, out = array.derive_rotation_from_array(st, vp, vs, sigmau,
+                                                       0, 0, 0)
+
+        np.testing.assert_array_almost_equal(np.zeros(1000), out['ts_d'],
+                                             decimal=12)
+        np.testing.assert_array_almost_equal(np.zeros(1000), out['ts_dh'],
+                                             decimal=12)
+        np.testing.assert_array_almost_equal(abs(shear_strainh), out['ts_s'],
+                                             decimal=12)
+        np.testing.assert_array_almost_equal(abs(shear_strainh), out['ts_sh'],
+                                             decimal=12)
+        np.testing.assert_array_almost_equal(np.zeros(1000), st_out[0],
+                                             decimal=12)
+        np.testing.assert_array_almost_equal(np.zeros(1000), st_out[1],
+                                             decimal=12)
+        np.testing.assert_array_almost_equal(np.zeros(1000), st_out[2],
+                                             decimal=12)
+        np.testing.assert_array_almost_equal(np.zeros(1000), out['ts_m'],
+                                             decimal=12)
+
+    # def test_plot_radial_transfer_function(self):
+    #     """
+    #     Tests the plotting of radial array transfer functions.
+    #     """
+    #     arr = SeismicArray('pfield', inventory=read_inventory(
+    #         os.path.join(self.path, 'pfield_inv_for_instaseis.xml')))
+    #     with ImageComparison(self.path_images, "radialtransferfunc.png") as ic:
+    #         arr.plot_radial_transfer_function(0, 0.6, 0.05, [0.2])
+    #         plt.savefig(ic.name)
+    #
+    # def test_array_plotting(self):
+    #     """
+    #     Tests the plotting of arrays.
+    #     """
+    #     arr = SeismicArray('pfield', inventory=read_inventory(
+    #         os.path.join(self.path, 'pfield_inv_for_instaseis.xml')))
+    #     with ImageComparison(self.path_images, "seismic_array_map.png") as ic:
+    #         arr.plot()
+    #         plt.savefig(ic.name)
 
 
 def suite():
