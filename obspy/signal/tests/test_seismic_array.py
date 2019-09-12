@@ -636,6 +636,21 @@ class SeismicArrayTestCase(unittest.TestCase):
         np.testing.assert_array_almost_equal(np.zeros(1000), out['ts_m'],
                                              decimal=12)
 
+    def test__geometry_dict_to_array(self):
+        geo_dict_latlon = {'1': {'latitude': 5, 'longitude': 10,
+                           'absolute_height_in_km': 1}}
+        geo_dict_xyz = {'1': {'x': 5, 'y': 10, 'z': 1}}
+
+        array_latlon = self.geometry_array._geometry_dict_to_array(
+            geo_dict_latlon)
+        array_xyz = self.geometry_array._geometry_dict_to_array(
+            geo_dict_xyz)
+
+        ref_array = [[5., 10., 1.]]
+
+        np.testing.assert_array_equal(array_latlon, ref_array)
+        np.testing.assert_array_equal(array_xyz, ref_array)
+
     # def test_plot_radial_transfer_function(self):
     #     """
     #     Tests the plotting of radial array transfer functions.
