@@ -613,7 +613,7 @@ class SeismicArray(object):
 
         if align:
             for item in align_phase:
-                stream = self.align_phases(self, stream, origin_, item)
+                stream = self.align_phases(stream, origin_, item)
 
         time_shift_table = self._get_timeshift_baz(
             sll, slm, sls, baz, latitude=center_['latitude'],
