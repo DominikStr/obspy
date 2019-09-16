@@ -608,7 +608,7 @@ class SeismicArray(object):
         else:
             baz = float(event_or_baz)
             if align:
-                msg = "For the aling option an event has to be specified"
+                msg = "For the align option an event has to be specified"
                 raise ValueError(msg)
 
         if align:
@@ -1204,7 +1204,7 @@ class SeismicArray(object):
             self.inventory = invbkp
             shutil.rmtree(tmpdir)
 
-    def _attach_coords_to_stream(self, stream, event=None):
+    def _attach_coords_to_stream(self, stream, origin=None):
         """
         Attaches dictionary with latitude, longitude and elevation to each
         trace in stream as `trace.stats.coords`. Takes into account local
@@ -1214,9 +1214,9 @@ class SeismicArray(object):
 
         for tr in stream:
             coords = geo[tr.id]
-            if event:
-                event_lat = event.origins[0].latitude
-                event_lng = event.origins[0].longitude
+            if origin:
+                event_lat = origin.latitude
+                event_lng = origin.longitude
                 dist = locations2degrees(coords["latitude"],
                                          coords["longitude"], event_lat,
                                          event_lng)
@@ -2546,7 +2546,11 @@ class SeismicArray(object):
         event_depth_in_km = event.origins[0].depth / 1000.0
         event_time = event.origins[0].time
 
-        self._attach_coords_to_stream(stream, event)
+        if isinstance(event, Event):
+            origin_ = event.origins[0]
+        elif isinstance(event, Origin):
+            origin_ = event
+        self._attach_coords_to_stream(stream, origin_)
 
         cmap = plt.cm.get_cmap('jet')
 
@@ -2624,12 +2628,6 @@ class SeismicArray(object):
 
     def align_phases(self, stream, event, phase_name, vel_model='ak135'):
 
-        if isinstance(event, Event):
-            origin_ = event.origins[0]
-
-        elif isinstance(event, Origin):
-            origin_ = event
-
         starttime = max([tr.stats.starttime for tr in stream])
         stt = starttime
         endtime = min([tr.stats.endtime for tr in stream])
@@ -2637,7 +2635,12 @@ class SeismicArray(object):
         stream.trim(starttime, endtime)
         shift = []
         stream = stream.copy()
-        self._attach_coords_to_stream(stream, event)
+
+        if isinstance(event, Event):
+            origin_ = event.origins[0]
+        elif isinstance(event, Origin):
+            origin_ = event
+        self._attach_coords_to_stream(stream, origin_)
 
         stream.traces = sorted(stream.traces,
                                key=lambda x: x.stats.coordinates.distance)[::-1]
@@ -2647,6 +2650,9 @@ class SeismicArray(object):
             tt = model.get_travel_times(
                 distance_in_degree=tr.stats.coordinates.distance,
                 source_depth_in_km=origin_.depth / 1000.0)
+            if phase_name not in [arrival.name for arrival in tt]:
+                raise ValueError('Selected Phase "{}" not occurring.'
+                                 .format(phase_name))
             for t in tt:
                 if t.name != phase_name:
                     continue
