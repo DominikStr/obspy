@@ -983,6 +983,56 @@ class SeismicArray(object):
                                            wlen=wlen, wfrac=wfrac,
                                            slx=slx, sly=sly, sls=sls)
 
+    def capon_estimator(self, stream, frqlow, frqhigh,
+                    prefilter=True, plots=(), static3d=False,
+                    array_response=False,
+                    vel_corr=4.8, wlen=-1, wfrac=0.8,
+                    slx=(-10, 10), sly=(-10, 10), sls=0.5):
+        """
+        Capon's high resolution estimator.
+
+        :param stream: Waveforms for the array processing.
+        :type stream: :class:`obspy.core.stream.Stream`
+        :param prefilter: Whether to bandpass data to selected frequency range
+        :type prefilter: bool
+        :param frqlow: Low corner of frequency range for array analysis
+        :type frqlow: float
+        :param frqhigh: High corner of frequency range for array analysis
+        :type frqhigh: float
+        :param static3d: static correction of topography using `vel_corr` as
+         velocity (slow!)
+        :type static3d: bool
+        :param vel_corr: Correction velocity for static topography correction
+         in km/s.
+        :type vel_corr: float
+        :param wlen: sliding window for analysis in seconds, use -1 to use the
+         whole trace without windowing.
+        :type wlen: float
+        :param wfrac: fraction of sliding window to use for step.
+        :type wfrac: float
+        :param slx: Min/Max slowness for analysis in x direction [s/km].
+        :type slx: (float, float)
+        :param sly: Min/Max slowness for analysis in y direction [s/km].
+        :type sly: (float, float)
+        :param sls: step width of slowness grid [s/km].
+        :type sls: float
+        :param plots: List or tuple of desired plots that should be plotted for
+         each beamforming window.
+         Supported options:
+         "slowness_baz" for backazimuth-slowness maps for each window,
+         "slowness_xy" for slowness_xy maps for each window.
+         Further plotting otions are attached to the returned object.
+        :rtype: :class:`~obspy.signal.array_analysis.BeamformerResult`
+        """
+        return self._array_analysis_helper(stream=stream, method="Capon",
+                                           frqlow=frqlow, frqhigh=frqhigh,
+                                           prefilter=prefilter, plots=plots,
+                                           static3d=static3d,
+                                           array_r=array_response,
+                                           vel_corr=vel_corr,
+                                           wlen=wlen, wfrac=wfrac,
+                                           slx=slx, sly=sly, sls=sls)
+
     def _array_analysis_helper(self, stream, method, frqlow, frqhigh,
                                prefilter=True, static3d=False, array_r=False,
                                vel_corr=4.8, wlen=-1, wfrac=0.8, slx=(-10, 10),
@@ -2263,8 +2313,16 @@ class SeismicArray(object):
                             shifted = stream[i].data[
                                 s + offset: s + nsamp + offset]
                             singlet += 1. / nstat * np.sum(shifted * shifted)
-                            beam += 1. / nstat * shifted * np.power(coh,
-                                                                    nthroot)
+                            try:
+                                beam += 1. / nstat * shifted * np.power(coh,
+                                                                        nthroot)
+                            except ValueError:
+                                _coh = coh[:len(shifted)]
+                                temp = 1. / nstat * shifted * np.power(_coh,
+                                                                       nthroot)
+                                beam += np.pad(temp, (0, beam.shape[0] -
+                                                      temp.shape[0]),
+                                               'constant')
                         bs = np.sum(beam * beam)
                         abspow_map[x, y] = bs / singlet
                         if abspow_map[x, y] > max_beam:
