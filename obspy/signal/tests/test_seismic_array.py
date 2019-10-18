@@ -103,6 +103,49 @@ class SeismicArrayTestCase(unittest.TestCase):
         transff_testcoords /= 1000.
         self.transff_array = create_simple_array(transff_testcoords, 'longlat')
 
+        # setup for rotation testing
+        array_coords = np.array([[0.0, 0.0, 0.0],
+                                 [-5.0, 7.0, 0.0],
+                                 [5.0, 7.0, 0.0],
+                                 [10.0, 0.0, 0.0],
+                                 [5.0, -7.0, 0.0],
+                                 [-5.0, -7.0, 0.0],
+                                 [-10.0, 0.0, 0.0]])
+
+        stations = []
+        for i, cor in enumerate(array_coords):
+            sta = Station('S%d' % i, cor[0], cor[1], cor[2],
+                          channels=[Channel('C%dN' % i, '', cor[0], cor[1],
+                                            cor[2], 0),
+                                    Channel('C%dE' % i, '', cor[0], cor[1],
+                                            cor[2], 0),
+                                    Channel('C%dZ' % i, '', cor[0], cor[1],
+                                            cor[2], 0)])
+            stations.append(sta)
+
+        rotnet = Network('N', stations=stations)
+        rotinv = Inventory(networks=[rotnet])
+        self.rotatation_array = SeismicArray(name='Rot_Array', inventory=rotinv)
+
+        # array_coords_km is needed to compute the test results, array_coords
+        # is used as input for the derive_rotation_from_array method
+        self.rotatation_array_coords_km = \
+            self.rotatation_array._geometry_dict_to_array(
+            self.rotatation_array._get_geometry_xyz(0, 0, 0))[::3]
+        self.rotatation_array_coords = \
+            self.rotatation_array._geometry_dict_to_array(
+            self.rotatation_array.geometry)[::3]
+
+        ts1 = np.empty((1000, 7))
+        ts2 = np.empty((1000, 7))
+        ts3 = np.empty((1000, 7))
+        ts1.fill(np.NaN)
+        ts2.fill(np.NaN)
+        ts3.fill(np.NaN)
+        self.rotation_ts = (ts1, ts2, ts3)
+        # parameters: (sigmau, vp, vs)
+        self.rotatation_parameters = (0.0001, 1.93, 0.326)
+
     def test__get_geometry(self):
         geo = self.geometry_array.geometry
         geo_w_chas = self.geometry_array_w_chas.geometry
@@ -477,44 +520,15 @@ class SeismicArrayTestCase(unittest.TestCase):
 
     def test_derive_rotation_from_array(self):
         # Setup
-        array_coords = np.array([[0.0, 0.0, 0.0],
-                                 [-5.0, 7.0, 0.0],
-                                 [5.0, 7.0, 0.0],
-                                 [10.0, 0.0, 0.0],
-                                 [5.0, -7.0, 0.0],
-                                 [-5.0, -7.0, 0.0],
-                                 [-10.0, 0.0, 0.0]])
-
-        stations = []
-        for i, cor in enumerate(array_coords):
-            sta = Station('S%d' % i, cor[0], cor[1], cor[2],
-                          channels=[Channel('C%dN' % i, '', cor[0], cor[1],
-                                            cor[2], 0),
-                                    Channel('C%dE' % i, '', cor[0], cor[1],
-                                            cor[2], 0),
-                                    Channel('C%dZ' % i, '', cor[0], cor[1],
-                                            cor[2], 0)])
-            stations.append(sta)
-
-        rotnet = Network('N', stations=stations)
-        rotinv = Inventory(networks=[rotnet])
-        array = SeismicArray(name='Rot_Array', inventory=rotinv)
+        array = self.rotatation_array
 
         # array_coords_km is needed to compute the test results, array_coords
         # is used as input for the derive_rotation_from_array method
-        array_coords_km = array._geometry_dict_to_array(
-            array._get_geometry_xyz(0, 0, 0))[::3]
-        array_coords = array._geometry_dict_to_array(array.geometry)[::3]
+        array_coords_km = self.rotatation_array_coords_km
+        array_coords = self.rotatation_array_coords
 
-        ts1 = np.empty((1000, 7))
-        ts2 = np.empty((1000, 7))
-        ts3 = np.empty((1000, 7))
-        ts1.fill(np.NaN)
-        ts2.fill(np.NaN)
-        ts3.fill(np.NaN)
-        sigmau = 0.0001
-        vp = 1.93
-        vs = 0.326
+        ts1, ts2, ts3 = self.rotation_ts
+        sigmau, vp, vs = self.rotatation_parameters
 
         # Tests function array_rotation_strain with synthetic data with pure
         # rotation and no strain
