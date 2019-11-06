@@ -443,7 +443,7 @@ class SeismicArray(object):
                 "z": absolute_height_in_km - value["absolute_height_in_km"]
             }
         if correct_3dplane:
-            self._correct_with_3dplane(geometry)
+            geometry = self._correct_with_3dplane(geometry)
         return geometry
 
     def _get_timeshift_baz(self, sll, slm, sls, baz, latitude, longitude,
