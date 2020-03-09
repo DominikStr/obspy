@@ -32,6 +32,7 @@ import numpy as np
 from matplotlib import mlab
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.ticker import FormatStrFormatter
+from matplotlib.patheffects import withStroke
 
 from obspy import Stream, Trace, UTCDateTime, __version__
 from obspy.core import Stats
@@ -52,6 +53,88 @@ dtiny = np.finfo(0.0).tiny
 
 NOISE_MODEL_FILE = os.path.join(os.path.dirname(__file__),
                                 "data", "noise_models.npz")
+
+earthquake_models = {
+    (1.5, 10): [[7.0700000e-01, 1.4140000e+00, 2.8280000e+00, 5.6600000e+00,
+                 1.1300000e+01, 2.2600000e+01],
+                [1.1940722e-06, 5.9652811e-06, 4.2022150e-05, 2.1857010e-04,
+                 6.4011669e-04, 1.0630361e-03]],
+    (1.5, 100): [[1.4140000e+00, 2.8280000e+00, 5.6600000e+00, 1.1300000e+01,
+                  2.2600000e+01],
+                 [2.0636508e-07, 1.0591860e-06, 4.4487964e-06, 1.1678490e-05,
+                  1.2427714e-05]],
+    (2.5, 10): [[3.5350000e-01, 7.0700000e-01, 1.4140000e+00, 2.8280000e+00,
+                 5.6600000e+00, 1.1300000e+01, 2.2600000e+01],
+                [3.1301161e-06, 1.9775227e-05, 1.5482427e-04, 8.3811450e-04,
+                 3.7537242e-03, 7.3529155e-03, 6.5422494e-03]],
+    (2.5, 100): [[7.0700000e-01, 1.4140000e+00, 2.8280000e+00, 5.6600000e+00,
+                  1.1300000e+01, 2.2600000e+01],
+                 [7.4170515e-07, 4.9107516e-06, 2.5050832e-05, 8.4981163e-05,
+                  9.5891456e-05, 6.5125171e-05]],
+    (3.5, 10): [[1.7670000e-01, 3.5350000e-01, 7.0700000e-01, 1.4140000e+00,
+                 2.8280000e+00, 5.6600000e+00, 1.1300000e+01, 2.2600000e+01],
+                [1.4096634e-05, 8.5860094e-05, 5.4403050e-04, 3.4576905e-03,
+                 1.3476040e-02, 3.4295149e-02, 4.7010730e-02, 2.3188069e-02]],
+    (3.5, 100): [[3.5350000e-01, 7.0700000e-01, 1.4140000e+00, 2.8280000e+00,
+                  5.6600000e+00, 1.1300000e+01, 2.2600000e+01],
+                 [2.0677442e-06, 1.4237587e-05, 8.5915636e-05, 3.8997357e-04,
+                  1.0533844e-03, 8.7243737e-04, 2.8224063e-04]],
+    (4.5, 10): [[1.7670000e-01, 3.5350000e-01, 7.0700000e-01, 1.4140000e+00,
+                 2.8280000e+00, 5.6600000e+00, 1.1300000e+01, 2.2600000e+01],
+                [4.0994260e-05, 2.9194046e-04, 1.9989323e-03, 1.0610332e-02,
+                 3.1188683e-02, 6.5872809e-02, 7.7301339e-02, 2.7431279e-02]],
+    (4.5, 100): [[1.7670000e-01, 3.5350000e-01, 7.0700000e-01, 1.4140000e+00,
+                  2.8280000e+00, 5.6600000e+00, 1.1300000e+01, 2.2600000e+01],
+                 [8.3385376e-06, 4.8130301e-05, 3.1461832e-04, 1.1054180e-03,
+                  3.2015584e-03, 5.9504166e-03, 3.4106672e-03, 1.0389085e-03]],
+    (5.5, 10): [[4.4187500e-02, 8.8375000e-02, 1.7670000e-01, 3.5350000e-01,
+                 7.0700000e-01, 1.4140000e+00, 2.8280000e+00, 5.6600000e+00,
+                 1.1300000e+01, 2.2600000e+01],
+                [5.1597812e-05, 2.4350754e-04, 1.5861857e-03, 9.1333683e-03,
+                 5.4321168e-02, 3.0210031e-01, 4.4505525e-01, 3.3287588e-01,
+                 3.0775399e-01, 1.2501407e-01]],
+    (5.5, 100): [[4.4187500e-02, 8.8375000e-02, 1.7670000e-01, 3.5350000e-01,
+                  7.0700000e-01, 1.4140000e+00, 2.8280000e+00, 5.6600000e+00,
+                  1.1300000e+01, 2.2600000e+01],
+                 [7.6042044e-06, 5.0568931e-05, 2.6926792e-04, 9.7744507e-04,
+                  3.4530700e-03, 9.2832164e-03, 1.5054122e-02, 1.3421025e-02,
+                  8.0524871e-03, 2.0691071e-03]],
+    (6.5, 10): [[8.8375000e-02, 1.7670000e-01, 3.5350000e-01, 7.0700000e-01,
+                 1.4140000e+00, 2.8280000e+00, 5.6600000e+00, 1.1300000e+01,
+                 2.2600000e+01],
+                [1.7468292e-02, 6.5551361e-02, 1.8302926e-01, 3.9065640e-01,
+                 7.1420714e-01, 1.0447672e+00, 1.2770160e+00, 1.0372500e+00,
+                 5.0465056e-01]],
+    (6.5, 100): [[2.2097000e-02, 4.4187500e-02, 8.8375000e-02, 1.7670000e-01,
+                  3.5350000e-01, 7.0700000e-01, 1.4140000e+00, 2.8280000e+00,
+                  5.6600000e+00, 1.1300000e+01, 2.2600000e+01],
+                 [1.4561822e-05, 1.4224456e-04, 8.7870935e-04, 2.4575511e-03,
+                  8.0615599e-03, 2.3743599e-02, 4.8707533e-02, 7.0969056e-02,
+                  7.6622487e-02, 2.6998756e-02, 4.6235290e-03]],
+    (7, 10): [[4.4187500e-02, 8.8375000e-02, 1.7670000e-01, 3.5350000e-01,
+               7.0700000e-01, 1.4140000e+00, 2.8280000e+00, 5.6600000e+00,
+               1.1300000e+01, 2.2600000e+01, 4.5200000e+01, 7.0700000e+01],
+              [9.1004029e-03, 4.7514014e-02, 1.5787725e-01, 3.1426661e-01,
+               6.3241827e-01, 1.0667690e+00, 1.2675411e+00, 1.1326387e+00,
+               8.3962478e-01, 4.1229082e-01, 1.6311586e-01, 5.6992659e-02]],
+    (7, 100): [[2.2097000e-02, 4.4187500e-02, 8.8375000e-02, 1.7670000e-01,
+                3.5350000e-01, 7.0700000e-01, 1.4140000e+00, 2.8280000e+00,
+                5.6600000e+00, 1.1300000e+01, 2.2600000e+01],
+               [5.8736062e-04, 3.2124167e-03, 1.5314560e-02, 3.3624616e-02,
+                6.4082408e-02, 1.3541913e-01, 1.8690009e-01, 1.8862548e-01,
+                1.1841223e-01, 4.8641263e-02, 1.3723779e-02]],
+    (6, 3000): [[5.0000000e-03, 4.5000000e-02, 3.0000000e-01, 1.3000000e+00,
+                 6.0000000e+00],
+                [9.8100000e-10, 7.8480000e-07, 4.9050000e-06, 4.9050000e-06,
+                 7.8480000e-07]],
+    (7, 3000): [[1.5000000e-03, 2.1000000e-02, 4.5000000e-02, 9.0000000e-02,
+                 8.0000000e-01, 6.0000000e+00],
+                [1.4715000e-09, 7.8480000e-06, 2.9430000e-05, 3.9240000e-05,
+                 1.4715000e-05, 9.8100000e-07]],
+    (8, 3000): [[1.5000000e-03, 1.0000000e-02, 4.5000000e-02, 9.0000000e-02,
+                 3.0000000e+00, 6.0000000e+00],
+                [9.8100000e-09, 3.9240000e-06, 1.1772000e-04, 1.9620000e-04,
+                 4.9050000e-06, 1.9620000e-06]]}
 
 
 def fft_taper(data):
@@ -226,6 +309,8 @@ class PPSD(object):
     # because some types are not loadable without allowing pickle (#2409).
     NPZ_SIMPLE_TYPE_MAP = {None: ''}
     NPZ_SIMPLE_TYPE_MAP_R = {v: i for i, v in NPZ_SIMPLE_TYPE_MAP.items()}
+    # Add current version as a class attribute to avoid hard coding it.
+    _CURRENT_VERSION = 3
 
     def __init__(self, stats, metadata, skip_on_gaps=False,
                  db_bins=(-200, -50, 1.), ppsd_length=3600.0, overlap=0.5,
@@ -339,7 +424,7 @@ class PPSD(object):
             raise ValueError(msg)
 
         # save version numbers
-        self.ppsd_version = 2
+        self.ppsd_version = self._CURRENT_VERSION
         self.obspy_version = __version__
         self.matplotlib_version = ".".join(map(str, MATPLOTLIB_VERSION))
         self.numpy_version = np.__version__
@@ -798,8 +883,8 @@ class PPSD(object):
                 else:
                     # throw warnings if trace length is different
                     # than ppsd_length..!?!
-                    slice = tr.slice(t1, t1 + self.ppsd_length
-                                     - tr.stats.delta)
+                    slice = tr.slice(t1, t1 + self.ppsd_length -
+                                     tr.stats.delta)
                     # XXX not good, should be working in place somehow
                     # XXX how to do it with the padding, though?
                     success = self.__process(slice)
@@ -831,9 +916,9 @@ class PPSD(object):
             tr.data = tr.data[:-1]
         # one last check..
         if len(tr) != self.len:
-            msg = "Got a piece of data with wrong length. Skipping"
+            msg = ("Got a piece of data with wrong length. Skipping:\n" +
+                   str(tr))
             warnings.warn(msg)
-            print(len(tr), self.len)
             return False
         # being paranoid, only necessary if in-place operations would follow
         tr.data = tr.data.astype(np.float64)
@@ -1267,7 +1352,7 @@ class PPSD(object):
             return None
         hist_count = self.current_histogram_count
         mean = (hist * self.db_bin_centers / hist_count).sum(axis=1)
-        return (self.period_bin_centers, mean)
+        return self.period_bin_centers, mean
 
     def save_npz(self, filename):
         """
@@ -1289,7 +1374,7 @@ class PPSD(object):
         np.savez_compressed(filename, **out)
 
     @staticmethod
-    def load_npz(filename, metadata=None):
+    def load_npz(filename, metadata=None, allow_pickle=False):
         """
         Load previously computed PPSD results.
 
@@ -1306,6 +1391,11 @@ class PPSD(object):
             :class:`~obspy.io.xseed Parser` or str or dict
         :param metadata: Response information of instrument. See notes in
             :meth:`PPSD.__init__` for details.
+        :type allow_pickle: bool
+        :param allow_pickle:
+            Allow the pickle protocol to be used when de-serializing saved
+            PPSDs. This is only required for npz files written by ObsPy
+            versions less than 1.2.0.
         """
         def _load(data):
             # the information regarding stats is set from the npz
@@ -1317,7 +1407,13 @@ class PPSD(object):
                 # we have to convert those back to lists (or simple types), so
                 # that additionally processed data can be appended/inserted
                 # later.
-                data_ = data[key]
+                try:
+                    data_ = data[key]
+                except ValueError:
+                    msg = ("Loading PPSD results saved with ObsPy versions < "
+                           "1.2 requires setting the allow_pickle parameter "
+                           "of PPSD.load_npz to True")
+                    raise ValueError(msg)
                 if key in ppsd.NPZ_STORE_KEYS_LIST_TYPES:
                     if key in ['_times_data', '_times_gaps']:
                         data_ = data_.tolist()
@@ -1338,12 +1434,17 @@ class PPSD(object):
                         data_ = [UTCDateTime(t)._ns for t in data_]
                 setattr(ppsd, key, data_)
             # we converted all data, so update ppsd version
-            ppsd.ppsd_version = 2
+            ppsd.ppsd_version = PPSD._CURRENT_VERSION
             return ppsd
 
         # XXX get rid of if/else again when bumping minimal numpy to 1.7
         if NUMPY_VERSION >= [1, 7]:
-            with np.load(filename, allow_pickle=True) as data:
+            # XXX get rid of if/else again when bumping minimal numpy to 1.10
+            if NUMPY_VERSION >= [1, 10]:
+                kwargs = {'allow_pickle': allow_pickle}
+            else:
+                kwargs = {}
+            with np.load(filename, **kwargs) as data:
                 return _load(data)
         else:
             data = np.load(filename)
@@ -1352,7 +1453,7 @@ class PPSD(object):
             finally:
                 data.close()
 
-    def add_npz(self, filename):
+    def add_npz(self, filename, allow_pickle=False):
         """
         Add previously computed PPSD results to current PPSD instance.
 
@@ -1368,11 +1469,16 @@ class PPSD(object):
         :param filename: Name of numpy .npz file(s) with stored PPSD data.
             Wildcards are possible and will be expanded using
             :py:func:`glob.glob`.
+        :type allow_pickle: bool
+        :param allow_pickle:
+            Allow the pickle protocol to be used when de-serializing saved
+            PPSDs. This is only required for npz files written by ObsPy
+            versions less than 1.2.0.
         """
         for filename in glob.glob(filename):
-            self._add_npz(filename)
+            self._add_npz(filename, allow_pickle=allow_pickle)
 
-    def _add_npz(self, filename):
+    def _add_npz(self, filename, allow_pickle=False):
         """
         See :meth:`PPSD.add_npz()`.
         """
@@ -1434,8 +1540,19 @@ class PPSD(object):
 
         # XXX get rid of if/else again when bumping minimal numpy to 1.7
         if NUMPY_VERSION >= [1, 7]:
-            with np.load(filename) as data:
-                _add(data)
+            # XXX get rid of if/else again when bumping minimal numpy to 1.10
+            if NUMPY_VERSION >= [1, 10]:
+                kwargs = {'allow_pickle': allow_pickle}
+            else:
+                kwargs = {}
+            try:
+                with np.load(filename, **kwargs) as data:
+                    _add(data)
+            except ValueError:
+                msg = ("Loading PPSD results saved with ObsPy versions < "
+                       "1.2 requires setting the allow_pickle parameter "
+                       "of PPSD.load_npz to True (needs numpy>=1.10).")
+                raise ValueError(msg)
         else:
             data = np.load(filename)
             try:
@@ -1710,7 +1827,8 @@ class PPSD(object):
              show_noise_models=True, grid=True, show=True,
              max_percentage=None, period_lim=(0.01, 179), show_mode=False,
              show_mean=False, cmap=obspy_sequential, cumulative=False,
-             cumulative_number_of_colors=20, xaxis_frequency=False):
+             cumulative_number_of_colors=20, xaxis_frequency=False,
+             show_earthquakes=None):
         """
         Plot the 2D histogram of the current PPSD.
         If a filename is specified the plot is saved to this file, otherwise
@@ -1737,6 +1855,18 @@ class PPSD(object):
                 selected.
         :type show_noise_models: bool, optional
         :param show_noise_models: Enable/disable plotting of noise models.
+        :type show_earthquakes: bool, optional
+        :param show_earthquakes: Enable/disable plotting of earthquake models
+            like in [ClintonHeaton2002]_ and [CauzziClinton2013]_. Disabled by
+            default (``None``). Specify ranges (minimum and maximum) for
+            magnitude and distance of earthquake models given as four floats,
+            e.g. ``(0, 5, 0, 99)`` for magnitude 1.5 - 4.5 at a epicentral
+            distance of 10 km. Note only 10, 100 and 3000 km distances and
+            magnitudes 1.5 to 7.5 are available. Alternatively, a distance can
+            be specified in last float of a tuple of three, e.g. ``(0, 5, 10)``
+            for 10 km distance, or magnitude and distance can be specified in
+            a tuple of two floats, e.g. ``(5.5, 10)`` for magnitude 5.5 at 10
+            km distance.
         :type grid: bool, optional
         :param grid: Enable/disable grid in histogram plot.
         :type show: bool, optional
@@ -1824,6 +1954,44 @@ class PPSD(object):
                 else:
                     xdata = periods
                 ax.plot(xdata, noise_model, '0.4', linewidth=2, zorder=10)
+
+        if show_earthquakes is not None:
+            if len(show_earthquakes) == 2:
+                show_earthquakes = (show_earthquakes[0],
+                                    show_earthquakes[0] + 0.1,
+                                    show_earthquakes[1],
+                                    show_earthquakes[1] + 1)
+            if len(show_earthquakes) == 3:
+                show_earthquakes += (show_earthquakes[-1] + 1, )
+            min_mag, max_mag, min_dist, max_dist = show_earthquakes
+            for key, data in earthquake_models.items():
+                magnitude, distance = key
+                frequencies, accelerations = data
+                accelerations = np.array(accelerations)
+                frequencies = np.array(frequencies)
+                periods = 1.0 / frequencies
+                # Eq.1 from Clinton and Cauzzi (2013) converts
+                # power to density
+                ydata = accelerations / (periods ** (-.5))
+                ydata = 20 * np.log10(ydata / 2)
+                if not (min_mag <= magnitude <= max_mag and
+                        min_dist <= distance <= max_dist and
+                        min(ydata) < self.db_bin_edges[-1]):
+                    continue
+                xdata = periods
+                if xaxis_frequency:
+                    xdata = frequencies
+                ax.plot(xdata, ydata, '0.4', linewidth=2)
+                leftpoint = np.argsort(xdata)[0]
+                if not ydata[leftpoint] < self.db_bin_edges[-1]:
+                    continue
+                ax.text(xdata[leftpoint],
+                        ydata[leftpoint],
+                        'M%.1f\n%dkm' % (magnitude, distance),
+                        ha='right', va='top',
+                        color='w', weight='bold', fontsize='x-small',
+                        path_effects=[withStroke(linewidth=3,
+                                                 foreground='0.4')])
 
         if show_histogram:
             label = "[%]"
@@ -2044,7 +2212,7 @@ def get_nhnm():
 
 
 def _check_npz_ppsd_version(ppsd, npzfile):
-    # add some future-proofing and show a warning if older obspy
+    # add some future-proofing and show a warning if older ObsPy
     # versions should read a more recent ppsd npz file, since this is very
     # like problematic
     if npzfile['ppsd_version'].item() > ppsd.ppsd_version:

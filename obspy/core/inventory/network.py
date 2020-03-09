@@ -19,10 +19,12 @@ import fnmatch
 import warnings
 
 from obspy.core.util.obspy_types import ObsPyException, ZeroSamplingRate
+from obspy.geodetics import inside_geobounds
 
 from .station import Station
 from .util import (
-    BaseNode, _unified_content_strings, _textwrap, _response_plot_label)
+    BaseNode, Operator, _unified_content_strings, _textwrap,
+    _response_plot_label)
 
 
 @python_2_unicode_compatible
@@ -38,7 +40,8 @@ class Network(BaseNode):
                  selected_number_of_stations=None, description=None,
                  comments=None, start_date=None, end_date=None,
                  restricted_status=None, alternate_code=None,
-                 historical_code=None, data_availability=None):
+                 historical_code=None, data_availability=None,
+                 identifiers=None, operators=None, source_id=None):
         """
         :type code: str
         :param code: The SEED network code.
@@ -71,17 +74,31 @@ class Network(BaseNode):
         :type data_availability: :class:`~obspy.station.util.DataAvailability`
         :param data_availability: Information about time series availability
             for the network.
+        :type identifiers: list of str, optional
+        :param identifiers: Persistent identifiers for network/station/channel
+            (schema version >=1.1). URIs are in general composed of a 'scheme'
+            and a 'path' (optionally with additional components), the two of
+            which separated by a colon.
+        :type operators: list of :class:`~obspy.core.inventory.util.Operator`
+        :param operators: An operating agency and associated contact persons.
+        :type source_id: str, optional
+        :param source_id: A data source identifier in URI form
+            (schema version >=1.1). URIs are in general composed of a 'scheme'
+            and a 'path' (optionally with additional components), the two of
+            which separated by a colon.
         """
         self.stations = stations or []
         self.total_number_of_stations = total_number_of_stations
         self.selected_number_of_stations = selected_number_of_stations
+        self.operators = operators or []
 
         super(Network, self).__init__(
             code=code, description=description, comments=comments,
             start_date=start_date, end_date=end_date,
             restricted_status=restricted_status, alternate_code=alternate_code,
             historical_code=historical_code,
-            data_availability=data_availability)
+            data_availability=data_availability,
+            identifiers=identifiers, source_id=source_id)
 
     @property
     def total_number_of_stations(self):
@@ -104,6 +121,23 @@ class Network(BaseNode):
             msg = "selected_number_of_stations cannot be negative."
             raise ValueError(msg)
         self._selected_number_of_stations = value
+
+    @property
+    def operators(self):
+        return self._operators
+
+    @operators.setter
+    def operators(self, value):
+        if not hasattr(value, "__iter__"):
+            msg = "Operators needs to be an iterable, e.g. a list."
+            raise ValueError(msg)
+        # make sure to unwind actual iterators, or the just might get exhausted
+        # at some point
+        operators = [operator for operator in value]
+        if any([not isinstance(x, Operator) for x in operators]):
+            msg = "Operators can only contain Operator objects."
+            raise ValueError(msg)
+        self._operators = operators
 
     def __len__(self):
         return len(self.stations)
@@ -331,7 +365,9 @@ class Network(BaseNode):
 
     def select(self, station=None, location=None, channel=None, time=None,
                starttime=None, endtime=None, sampling_rate=None,
-               keep_empty=False):
+               keep_empty=False, minlatitude=None, maxlatitude=None,
+               minlongitude=None, maxlongitude=None, latitude=None,
+               longitude=None, minradius=None, maxradius=None):
         r"""
         Returns the :class:`Network` object with only the
         :class:`~obspy.core.inventory.station.Station`\ s /
@@ -389,6 +425,35 @@ class Network(BaseNode):
             given point in time (i.e. channels starting after given time will
             not be shown).
         :type sampling_rate: float
+        :param sampling_rate: Only include channels whose sampling rate
+            matches the given sampling rate, in Hz (within absolute tolerance
+            of 1E-8 Hz and relative tolerance of 1E-5)
+        :type minlatitude: float
+        :param minlatitude: Only include stations/channels with a latitude
+            larger than the specified minimum.
+        :type maxlatitude: float
+        :param maxlatitude: Only include stations/channels with a latitude
+            smaller than the specified maximum.
+        :type minlongitude: float
+        :param minlongitude: Only include stations/channels with a longitude
+            larger than the specified minimum.
+        :type maxlongitude: float
+        :param maxlongitude: Only include stations/channels with a longitude
+            smaller than the specified maximum.
+        :type latitude: float
+        :param latitude: Specify the latitude to be used for a radius
+            selection.
+        :type longitude: float
+        :param longitude: Specify the longitude to be used for a radius
+            selection.
+        :type minradius: float
+        :param minradius: Only include stations/channels within the specified
+            minimum number of degrees from the geographic point defined by the
+            latitude and longitude parameters.
+        :type maxradius: float
+        :param maxradius: Only include stations/channels within the specified
+            maximum number of degrees from the geographic point defined by the
+            latitude and longitude parameters.
         :type keep_empty: bool
         :param keep_empty: If set to `True`, stations that match
             themselves but have no matching child elements (channels)
@@ -407,13 +472,25 @@ class Network(BaseNode):
                 if not sta.is_active(time=time, starttime=starttime,
                                      endtime=endtime):
                     continue
+            geo_filters = dict(
+                minlatitude=minlatitude, maxlatitude=maxlatitude,
+                minlongitude=minlongitude, maxlongitude=maxlongitude,
+                latitude=latitude, longitude=longitude, minradius=minradius,
+                maxradius=maxradius)
+            if any(value is not None for value in geo_filters.values()):
+                if not inside_geobounds(sta, **geo_filters):
+                    continue
 
             has_channels = bool(sta.channels)
 
             sta_ = sta.select(
                 location=location, channel=channel, time=time,
                 starttime=starttime, endtime=endtime,
-                sampling_rate=sampling_rate)
+                sampling_rate=sampling_rate,
+                minlatitude=minlatitude, maxlatitude=maxlatitude,
+                minlongitude=minlongitude, maxlongitude=maxlongitude,
+                latitude=latitude, longitude=longitude,
+                minradius=minradius, maxradius=maxradius)
 
             # If the station previously had channels but no longer has any
             # and keep_empty is False: Skip the station.

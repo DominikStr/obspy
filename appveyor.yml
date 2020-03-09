@@ -22,27 +22,13 @@ environment:
     # a later point release.
     # See: http://www.appveyor.com/docs/installed-software#python
 
-    # - PYTHON: "C:\\Miniconda"
-    #   PYTHON_VERSION: "2.7"
-    #   PYTHON_ARCH: "32"
-
     - PYTHON: "C:\\Miniconda-x64"
       PYTHON_VERSION: "2.7"
       PYTHON_ARCH: "64"
 
-    - PYTHON: "C:\\Miniconda3"
-      PYTHON_VERSION: "3.4"
-      PYTHON_ARCH: "32"
-      SKIP_NOTAG: "true"
-
     - PYTHON: "C:\\Miniconda3-x64"
       PYTHON_VERSION: "3.4"
       PYTHON_ARCH: "64"
-      SKIP_NOTAG: "true"
-
-    - PYTHON: "C:\\Miniconda35"
-      PYTHON_VERSION: "3.5"
-      PYTHON_ARCH: "32"
       SKIP_NOTAG: "true"
 
     - PYTHON: "C:\\Miniconda35-x64"
@@ -50,20 +36,16 @@ environment:
       PYTHON_ARCH: "64"
       SKIP_NOTAG: "true"
 
-    - PYTHON: "C:\\Miniconda36"
-      PYTHON_VERSION: "3.6"
-      PYTHON_ARCH: "32"
-
     - PYTHON: "C:\\Miniconda36-x64"
       PYTHON_VERSION: "3.6"
       PYTHON_ARCH: "64"
 
-    - PYTHON: "C:\\Miniconda37"
-      PYTHON_VERSION: "3.7"
-      PYTHON_ARCH: "32"
-
     - PYTHON: "C:\\Miniconda37-x64"
       PYTHON_VERSION: "3.7"
+      PYTHON_ARCH: "64"
+
+    - PYTHON: "C:\\Miniconda37-x64"
+      PYTHON_VERSION: "3.8"
       PYTHON_ARCH: "64"
 
 matrix:
@@ -103,17 +85,22 @@ install:
   # Check that we have the expected version and architecture for Python
   - "python -c \"import sys; print(sys.version)\""
 
-  # Install the build and runtime dependencies of the project.
-  - "conda update -q --yes conda"
   - "conda config --add channels conda-forge"
   # add channel twice to move it to the top of the channel priority list
   - "conda config --add channels conda-forge"
+  # Install the build and runtime dependencies of the project.
+  - "conda update -q --yes conda"
   # Create a conda environment using the required ObsPy packages.
   - "conda create -q --yes -n test python=%PYTHON_VERSION%"
   - "activate test"
   # Install default dependencies
   # pip 10.0.1 seems buggy and breaks all our appveyor builds
-  - "conda install -q --yes \"pip<10\" numpy scipy matplotlib lxml sqlalchemy mock nose gdal decorator requests basemap jsonschema pyshp cryptography \"proj4=4.9.3\""
+  - ps: |
+      If ($env:PYTHON_VERSION -eq "3.8") {
+          conda install -q --yes "pip>10.0.1" numpy scipy matplotlib lxml sqlalchemy mock nose gdal decorator requests jsonschema cryptography proj4
+      }else {
+          conda install -q --yes "pip>10.0.1" numpy scipy matplotlib lxml sqlalchemy mock nose gdal decorator requests basemap jsonschema pyshp cryptography proj4
+      }
   # somehow basemap/pyproj/proj4 can fail when PROJ_LIB is not set correctly
   # for whatever reason, see:
   #  - conda-forge/basemap-feedstock#36

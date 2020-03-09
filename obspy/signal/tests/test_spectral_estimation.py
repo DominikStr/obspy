@@ -20,12 +20,14 @@ import numpy as np
 from obspy import Stream, Trace, UTCDateTime, read, read_inventory, Inventory
 from obspy.core import Stats
 from obspy.core.inventory import Response
+from obspy.core.util import NUMPY_VERSION
 from obspy.core.util.base import NamedTemporaryFile
 from obspy.core.util.obspy_types import ObsPyException
 from obspy.core.util.testing import (
     ImageComparison, ImageComparisonException, MATPLOTLIB_VERSION)
 from obspy.io.xseed import Parser
 from obspy.signal.spectral_estimation import (PPSD, welch_taper, welch_window)
+from obspy.signal.spectral_estimation import earthquake_models
 
 
 PATH = os.path.join(os.path.dirname(__file__), 'data')
@@ -96,6 +98,15 @@ def _get_ppsd():
     return deepcopy(_ppsd)
 
 
+# XXX get rid of if/else again when bumping minimal numpy to 1.10
+if NUMPY_VERSION >= [1, 10]:
+    allow_pickle = {'allow_pickle': True}
+    allow_pickle_false = {'allow_pickle': False}
+else:
+    allow_pickle = {}
+    allow_pickle_false = {}
+
+
 class PsdTestCase(unittest.TestCase):
     """
     Test cases for psd.
@@ -136,8 +147,7 @@ class PsdTestCase(unittest.TestCase):
         file_noise = os.path.join(self.path, "pitsa_noise.npy")
         fn_psd_pitsa = "pitsa_noise_psd_samprate_100_nfft_512_noverlap_0.npy"
         file_psd_pitsa = os.path.join(self.path, fn_psd_pitsa)
-
-        noise = np.load(file_noise, allow_pickle=True)
+        noise = np.load(file_noise, **allow_pickle)
         # in principle to mimic PITSA's results detrend should be specified as
         # some linear detrending (e.g. from matplotlib.mlab.detrend_linear)
         psd_obspy, _ = psd(noise, NFFT=nfft, Fs=sampling_rate,
@@ -351,10 +361,12 @@ class PsdTestCase(unittest.TestCase):
 
         # load expected results, for both only PAZ and full response
         filename_paz = os.path.join(self.path, 'IUANMO_ppsd_paz.npz')
-        results_paz = PPSD.load_npz(filename_paz, metadata=None)
+        results_paz = PPSD.load_npz(filename_paz, metadata=None,
+                                    allow_pickle=True)
         filename_full = os.path.join(self.path,
                                      'IUANMO_ppsd_fullresponse.npz')
-        results_full = PPSD.load_npz(filename_full, metadata=None)
+        results_full = PPSD.load_npz(filename_full, metadata=None,
+                                     allow_pickle=True)
 
         # Calculate the PPSDs and test against expected results
         # first: only PAZ
@@ -539,6 +551,30 @@ class PsdTestCase(unittest.TestCase):
             with np.errstate(under='ignore'):
                 fig.savefig(ic.name)
 
+    def test_earthquake_models(self):
+        """
+        Test earthquake models
+        """
+        ppsd = _get_ppsd()
+        test_magnitudes = [3.5, 2.5, 1.5]
+        distance = 10
+        for magnitude in test_magnitudes:
+            key = (magnitude, distance)
+            fig = ppsd.plot(
+                show_earthquakes=(magnitude - 0.5, magnitude + 0.5, 5, 15),
+                show_noise_models=False, show=False)
+            ax = fig.axes[0]
+            line = ax.lines[0]
+            frequencies, accelerations = earthquake_models[key]
+            accelerations = np.array(accelerations)
+            periods = 1 / np.array(frequencies)
+            power = accelerations / (periods ** (-.5))
+            power = 20 * np.log10(power / 2)
+            self.assertEqual(list(line.get_ydata()), list(power))
+            self.assertEqual(list(line.get_xdata()), list(periods))
+            caption = 'M%.1f\n%dkm' % (magnitude, distance)
+            self.assertEqual(ax.texts[0].get_text(), caption)
+
     def test_ppsd_add_npz(self):
         """
         Test PPSD.add_npz().
@@ -722,7 +758,7 @@ class PsdTestCase(unittest.TestCase):
         """
         Test plot of several period bins over time
         """
-        ppsd = PPSD.load_npz(self.example_ppsd_npz)
+        ppsd = PPSD.load_npz(self.example_ppsd_npz, allow_pickle=True)
 
         restrictions = {'starttime': UTCDateTime(2011, 2, 6, 1, 1),
                         'endtime': UTCDateTime(2011, 2, 7, 21, 12),
@@ -773,7 +809,7 @@ class PsdTestCase(unittest.TestCase):
         Matplotlib version 3 shifts the x-axis labels but everything else looks
         the same. Skipping test for matplotlib >= 3 on 05/12/2018.
         """
-        ppsd = PPSD.load_npz(self.example_ppsd_npz)
+        ppsd = PPSD.load_npz(self.example_ppsd_npz, allow_pickle=True)
 
         # add some gaps in the middle
         for i in sorted(list(range(30, 40)) + list(range(8, 18)) + [4])[::-1]:
@@ -803,7 +839,7 @@ class PsdTestCase(unittest.TestCase):
                "consider updating your ObsPy installation.".format(
                    PPSD(stats=Stats(), metadata=None).ppsd_version))
         # 1 - loading a npz
-        data = np.load(self.example_ppsd_npz, allow_pickle=True)
+        data = np.load(self.example_ppsd_npz, **allow_pickle)
         # we have to load, modify 'ppsd_version' and save the npz file for the
         # test..
         items = {key: data[key] for key in data.files}
@@ -818,7 +854,7 @@ class PsdTestCase(unittest.TestCase):
                 PPSD.load_npz(filename)
         self.assertEqual(str(e.exception), msg)
         # 2 - adding a npz
-        ppsd = PPSD.load_npz(self.example_ppsd_npz)
+        ppsd = PPSD.load_npz(self.example_ppsd_npz, allow_pickle=True)
         for method in (ppsd.add_npz, ppsd._add_npz):
             with NamedTemporaryFile() as tf:
                 filename = tf.name
@@ -840,17 +876,58 @@ class PsdTestCase(unittest.TestCase):
     def test_can_read_npz_without_pickle(self):
         """
         Ensures that a default PPSD can be written and read without having to
-        allow np.load the use of pickle. See #2409.
+        allow np.load the use of pickle, or that a helpful error message is
+        raised if allow_pickle is required. See #2409.
         """
         # Init a test PPSD and empty byte stream.
-        ppsd = PPSD.load_npz(self.example_ppsd_npz)
+        ppsd = PPSD.load_npz(self.example_ppsd_npz, allow_pickle=True)
         byte_me = io.BytesIO()
         # Save PPSD to byte stream and rewind to 0.
         ppsd.save_npz(byte_me)
         byte_me.seek(0)
         # Load dict, will raise an exception if pickle is needed.
-        loaded_dict = dict(np.load(byte_me, allow_pickle=False))
+        loaded_dict = dict(np.load(byte_me, **allow_pickle_false))
         self.assertIsInstance(loaded_dict, dict)
+        # the rest of the test is only relevant on numpy versions that have
+        # allow_pickle kwarg (starting with version 1.10.0), older versions
+        # will always allow pickle and thus reading works
+        if NUMPY_VERSION < [1, 10]:
+            return
+        # A helpful error message is issued when allow_pickle is needed.
+        with self.assertRaises(ValueError) as context:
+            PPSD.load_npz(self.example_ppsd_npz)
+        self.assertIn('Loading PPSD results', str(context.exception))
+
+    def test_can_add_npz_without_pickle(self):
+        """
+        Ensure PPSD can be added without using the pickle protocol, or
+        that a helpful error message is raised if allow_pickle is required.
+        See #2409.
+        """
+
+        def _save_nps_require_pickle(filename, ppsd):
+            """ Save npz in such a way that requires pickle to load"""
+            out = {}
+            for key in PPSD.NPZ_STORE_KEYS:
+                out[key] = getattr(ppsd, key)
+            np.savez_compressed(filename, **out)
+
+        ppsd = _internal_get_ppsd()
+        # save PPSD in such a way to mock old versions.
+        with NamedTemporaryFile(suffix='.npz') as ntemp:
+            temp_path = ntemp.name
+            _save_nps_require_pickle(temp_path, ppsd)
+            # We should be able to load the files when allowing pickle.
+            ppsd.add_npz(temp_path, allow_pickle=True)
+            # the rest of the test is only relevant on numpy versions that have
+            # allow_pickle kwarg (starting with version 1.10.0), older versions
+            # will always allow pickle and thus reading works
+            if NUMPY_VERSION < [1, 10]:
+                return
+            # If not allow_pickle,  a helpful error msg should be raised.
+            with self.assertRaises(ValueError) as context:
+                ppsd.add_npz(temp_path)
+            self.assertIn('Loading PPSD results', str(context.exception))
 
 
 def suite():

@@ -6,6 +6,11 @@ export DH_ALWAYS_EXCLUDE=CVS:.git:.gitignore:__pycache__:src
 export PYBUILD_SYSTEM=distutils
 
 %:
+	# XXX somehow pybuild wants to build py37 even if it's not installed and we
+	# XXX try to tell it not to build it via PYBUILD_VERSIONS..
+	if [ `lsb_release -cs` = "cosmic" ]; then \
+		pybuild --disable '3.7'; \
+	fi
 	dh $@ --buildsystem=pybuild --with=python2,python3 --with quilt
 
 binary:
@@ -13,7 +18,7 @@ binary:
 
 override_dh_auto_build:
 	dh_auto_build
-	set -ex; for python in $(shell py3versions -r); do \
+	set -ex; for python in $(shell py3versions -d); do \
 	    $$python setup.py build; \
 	done;
 
@@ -21,7 +26,7 @@ override_dh_auto_install:
 	dh_auto_install #-- release
 	dh_numpy
 	dh_numpy3
-	set -ex; for python in $(shell py3versions -r); do \
+	set -ex; for python in $(shell py3versions -d); do \
 		echo $$python; \
 	    $$python setup.py install --root=$(CURDIR)/debian/tmp --install-layout=deb; \
 	done;

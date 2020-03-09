@@ -16,6 +16,7 @@ from future.utils import PY2
 import builtins
 import doctest
 import glob
+import importlib
 import inspect
 import io
 import os
@@ -23,6 +24,7 @@ import re
 import sys
 import tempfile
 import unicodedata
+import warnings
 from collections import OrderedDict
 
 import numpy as np
@@ -37,14 +39,14 @@ from obspy.core.util.misc import to_int_or_zero, buffered_load_entry_point
 # defining ObsPy modules currently used by runtests and the path function
 DEFAULT_MODULES = ['clients.filesystem', 'core', 'db', 'geodetics', 'imaging',
                    'io.ah', 'io.arclink', 'io.ascii', 'io.cmtsolution',
-                   'io.cnv', 'io.css', 'io.focmec', 'io.iaspei', 'io.win',
+                   'io.cnv', 'io.css', 'io.dmx', 'io.focmec', 'io.iaspei',
                    'io.gcf', 'io.gse2', 'io.json', 'io.kinemetrics', 'io.kml',
                    'io.mseed', 'io.ndk', 'io.nied', 'io.nlloc', 'io.nordic',
                    'io.pdas', 'io.pde', 'io.quakeml', 'io.reftek', 'io.rg16',
                    'io.sac', 'io.scardec', 'io.seg2', 'io.segy', 'io.seisan',
                    'io.sh', 'io.shapefile', 'io.seiscomp', 'io.stationtxt',
-                   'io.stationxml', 'io.wav', 'io.xseed', 'io.y', 'io.zmap',
-                   'realtime', 'scripts', 'signal', 'taup']
+                   'io.stationxml', 'io.wav', 'io.win', 'io.xseed', 'io.y',
+                   'io.zmap', 'realtime', 'scripts', 'signal', 'taup']
 NETWORK_MODULES = ['clients.arclink', 'clients.earthworm', 'clients.fdsn',
                    'clients.iris', 'clients.neic', 'clients.nrl',
                    'clients.seedlink', 'clients.seishub', 'clients.syngine']
@@ -55,7 +57,7 @@ WAVEFORM_PREFERRED_ORDER = ['MSEED', 'SAC', 'GSE2', 'SEISAN', 'SACXY', 'GSE1',
                             'Q', 'SH_ASC', 'SLIST', 'TSPAIR', 'Y', 'PICKLE',
                             'SEGY', 'SU', 'SEG2', 'WAV', 'WIN', 'CSS',
                             'NNSA_KB_CORE', 'AH', 'PDAS', 'KINEMETRICS_EVT',
-                            'GCF']
+                            'GCF', 'DMX']
 EVENT_PREFERRED_ORDER = ['QUAKEML', 'NLLOC_HYP']
 INVENTORY_PREFERRED_ORDER = ['STATIONXML', 'SEED', 'RESP']
 # waveform plugins accepting a byteorder keyword
@@ -382,7 +384,13 @@ def get_proj_version(raw_string=False):
     # proj4 is a c library, prproj wraps this.  proj_version is an attribute
     # of the Proj class that is only set when the projection is made. Make
     # a dummy projection and get the version
-    version_string = str(Proj(proj='utm', zone=10, ellps='WGS84').proj_version)
+    _proj = Proj(proj='utm', zone=10, ellps='WGS84')
+    if hasattr(_proj, 'proj_version'):
+        version_string = str(getattr(_proj, 'proj_version'))
+    else:
+        from pyproj import proj_version_str
+        version_string = proj_version_str
+
     if raw_string:
         return version_string
     version_list = [to_int_or_zero(no) for no in version_string.split(".")]
@@ -434,7 +442,7 @@ def _read_from_plugin(plugin_type, filename, format=None, **kwargs):
             # check format
             is_format = is_format(filename)
             if position is not None:
-                filename.seek(0, 0)
+                filename.seek(position, 0)
             if is_format:
                 break
         else:
@@ -565,8 +573,8 @@ class ComparingObject(object):
     """
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__)
-                and self.__dict__ == other.__dict__)
+        return (isinstance(other, self.__class__) and
+                self.__dict__ == other.__dict__)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -695,6 +703,87 @@ def _generic_reader(pathname_or_url=None, callback_func=None,
             for filename in pathnames[1:]:
                 generic.extend(callback_func(filename, **kwargs))
         return generic
+
+
+class CatchAndAssertWarnings(warnings.catch_warnings):
+    def __init__(self, clear=None, expected=None, show_all=True, **kwargs):
+        """
+        :type clear: list of str
+        :param clear: list of modules to clear warning
+            registries on (e.g. ``["obspy.signal", "obspy.core"]``), in order
+            to make sure any expected warnings will be shown and not suppressed
+            because already raised in previously executed code.
+        :type expected: list
+        :param expected: list of 2-tuples specifying expected
+            warnings that should be looked for when exiting the context
+            manager. An ``AssertionError`` will be raised if any expected
+            warning is not encountered. First item in tuple should be the
+            class of the warning, second item should be a regex matching (a
+            part of) the warning message (e.g.
+            ``(ObsPyDeprecationWarning, 'Attribute .* is deprecated')``).
+            Make sure to escape regex special characters like `(` or `.` with a
+            backslash and provide message regex as a raw string.
+        :type show_all: str
+        :param show_all: Whether to set ``warnings.simplefilter('always')``
+            when entering context.
+        """
+        self.registries_to_clear = clear
+        self.expected_warnings = expected
+        self.show_all = show_all
+        # always record warnings, obviously..
+        kwargs['record'] = True
+        super(CatchAndAssertWarnings, self).__init__(**kwargs)
+
+    def __enter__(self):
+        self.warnings = super(CatchAndAssertWarnings, self).__enter__()
+        if self.registries_to_clear:
+            for modulename in self.registries_to_clear:
+                self.clear_warning_registry(modulename)
+        if self.show_all:
+            warnings.simplefilter("always", Warning)
+        # this will always return the list of warnings because we set
+        # record=True
+        return self.warnings
+
+    def __exit__(self, *exc_info):
+        super(CatchAndAssertWarnings, self).__exit__(self, *exc_info)
+        # after cleanup, check expected warnings
+        self._assert_warnings()
+
+    @staticmethod
+    def clear_warning_registry(modulename):
+        """
+        Clear warning registry of specified module
+
+        :type modulename: str
+        :param modulename: Full module name (e.g. ``'obspy.signal'``)
+        """
+        mod = importlib.import_module(modulename)
+        try:
+            registry = mod.__warningregistry__
+        except AttributeError:
+            pass
+        else:
+            registry.clear()
+
+    def _assert_warnings(self):
+        """
+        Checks for expected warnings and raises an AssertionError if anyone of
+        these is not encountered.
+        """
+        if not self.expected_warnings:
+            return
+        for category, regex in self.expected_warnings:
+            for warning in self.warnings:
+                if not isinstance(warning.message, category):
+                    continue
+                if not re.search(regex, str(warning.message)):
+                    continue
+                # found a matching warning, so break out
+                break
+            else:
+                msg = 'Expected warning not raised: (%s, %s)'
+                raise AssertionError(msg % (category.__name__, regex))
 
 
 if __name__ == '__main__':

@@ -367,7 +367,7 @@ class Client(object):
                 if token_file:
                     msg = ("Read EIDA token from file '{}' but it does not "
                            "seem to contain a valid PGP message.").format(
-                                token_file)
+                               token_file)
                 else:
                     msg = ("EIDA token does not seem to be a valid PGP "
                            "message. If you passed a filename, make sure the "
@@ -442,7 +442,7 @@ class Client(object):
         :type latitude: float, optional
         :param latitude: Specify the latitude to be used for a radius search.
         :type longitude: float, optional
-        :param longitude: Specify the longitude to the used for a radius
+        :param longitude: Specify the longitude to be used for a radius
             search.
         :type minradius: float, optional
         :param minradius: Limit to events within the specified minimum number
@@ -668,7 +668,7 @@ class Client(object):
         :type latitude: float
         :param latitude: Specify the latitude to be used for a radius search.
         :type longitude: float
-        :param longitude: Specify the longitude to the used for a radius
+        :param longitude: Specify the longitude to be used for a radius
             search.
         :type minradius: float
         :param minradius: Limit results to stations within the specified
@@ -1737,6 +1737,10 @@ def raise_on_error(code, data):
         msg = ("The request URI is too large. Please contact the ObsPy "
                "developers.", server_info)
         raise NotImplementedError(msg)
+    elif code == 429:
+        msg = ("Sent too many requests in a given amount of time ('rate "
+               "limiting'). Wait before making a new request.", server_info)
+        raise FDSNException(msg, server_info)
     elif code == 500:
         raise FDSNException("Service responds: Internal server error",
                             server_info)
@@ -1832,7 +1836,7 @@ def setup_query_dict(service, locs, kwargs):
                 raise FDSNException(msg)
     # short aliases are not mentioned in the downloaded WADLs, so we have
     # to map it here according to the official FDSN WS documentation
-    for key in kwargs.keys():
+    for key in list(kwargs.keys()):
         if key in PARAMETER_ALIASES:
             value = kwargs.pop(key)
             if value is not None:

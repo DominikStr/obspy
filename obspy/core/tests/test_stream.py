@@ -15,11 +15,13 @@ from copy import deepcopy
 import numpy as np
 
 from obspy import Stream, Trace, UTCDateTime, read, read_inventory
+from obspy.core.inventory import Channel, Inventory, Network, Station
 from obspy.core.compatibility import mock
 from obspy.core.stream import _is_pickle, _read_pickle, _write_pickle
 from obspy.core.util.attribdict import AttribDict
 from obspy.core.util.base import NamedTemporaryFile, _get_entry_points
 from obspy.core.util.obspy_types import ObsPyException
+from obspy.core.util.testing import streams_almost_equal
 from obspy.io.xseed import Parser
 
 
@@ -703,6 +705,60 @@ class StreamTestCase(unittest.TestCase):
         self.assertEqual(len(st.select(component="Z")), 1)
         self.assertEqual(len(st.select(component="N")), 1)
         self.assertEqual(len(st.select(component="E")), 1)
+
+    def test_select_from_inventory(self):
+        # Create a test stream
+        headers = [
+            {'network': 'AA', 'station': 'ST01', 'channel': 'EHZ',
+             'location': '00', 'sampling_rate': 200.0, 'npts': 100,
+             'starttime': UTCDateTime(1990, 1, 1)},
+            {'network': 'AA', 'station': 'ST01', 'channel': 'EHZ',
+             'location': '00', 'sampling_rate': 200.0, 'npts': 100,
+             'starttime': UTCDateTime(1998, 1, 1)},
+            {'network': 'AA', 'station': 'ST01', 'channel': 'EHZ',
+             'location': '00', 'sampling_rate': 200.0, 'npts': 100,
+             'starttime': UTCDateTime(2000, 1, 1)},
+            {'network': 'AA', 'station': 'ST01', 'channel': 'EHN',
+             'location': '00', 'sampling_rate': 200.0, 'npts': 100,
+             'starttime': UTCDateTime(2000, 1, 1)},
+            {'network': 'AA', 'station': 'ST01', 'channel': 'EHE',
+             'location': '00', 'sampling_rate': 200.0, 'npts': 100,
+             'starttime': UTCDateTime(2000, 1, 1)},
+            {'network': 'AA', 'station': 'ST02', 'channel': 'EHZ',
+             'location': '00', 'sampling_rate': 200.0, 'npts': 100,
+             'starttime': UTCDateTime(2000, 1, 1)},
+            {'network': 'AB', 'station': 'ST01', 'channel': 'EHZ',
+             'location': '00', 'sampling_rate': 200.0, 'npts': 100,
+             'starttime': UTCDateTime(2000, 1, 1)}
+        ]
+        traces = []
+        for header in headers:
+            traces.append(Trace(data=np.random.randint(0, 1000, 100),
+                                header=header))
+        st = Stream(traces=traces)
+        # Create a test inventory
+        channels = [
+            Channel(code='EHZ', location_code='00',
+                    latitude=0.0, longitude=0.0, elevation=0.0, depth=0.0,
+                    start_date=UTCDateTime(1990, 1, 1),
+                    end_date=UTCDateTime(1998, 1, 1)),
+            Channel(code='EHZ', location_code='00',
+                    latitude=0.0, longitude=0.0, elevation=0.0, depth=0.0,
+                    start_date=UTCDateTime(1999, 1, 1))
+        ]
+        stations = [Station(code='ST01',
+                            latitude=0.0,
+                            longitude=0.0,
+                            elevation=0.0,
+                            channels=channels)]
+        networks = [Network('AA', stations=stations)]
+        inv = Inventory(networks=networks, source='TEST')
+        # tests
+        self.assertEqual(len(st.select(inventory=inv)), 2)
+        st_sel = st.select(network='AB')
+        self.assertEqual(len(st_sel.select(inventory=inv)), 0)
+        inv_sel = inv.select(starttime=UTCDateTime(2000, 1, 1))
+        self.assertEqual(len(st.select(inventory=inv_sel)), 1)
 
     def test_sort(self):
         """
@@ -2254,12 +2310,16 @@ class StreamTestCase(unittest.TestCase):
             # testing for full equality.
             if platform.system() == "Windows":  # pragma: no cover
                 self.assertEqual(tr1.stats, tr2.stats)
-                np.testing.assert_allclose(tr1.data, tr2.data)
+                # as of 2020-01-21 we see some new Win fails with one sample
+                # failing with:
+                #    Mismatched elements: 1 / 3000 (0.0333%)
+                #    Max absolute difference: 6.617444900424222e-24
+                #    Max relative difference: 2.0
+                # Maximum amplitudes in the trace are around 1e-8, so we can
+                # live with an atol of 1e-22
+                np.testing.assert_allclose(
+                    tr1.data, tr2.data, rtol=1e-6, atol=1e-22)
             else:
-                # Added (up to ###) to debug appveyor fails
-                self.assertEqual(tr1.stats, tr2.stats)
-                np.testing.assert_allclose(tr1.data, tr2.data)
-                ###
                 self.assertEqual(tr1, tr2)
 
     def test_select_empty_strings(self):
@@ -2290,7 +2350,14 @@ class StreamTestCase(unittest.TestCase):
         for tr in st1:
             tr.remove_response(pre_filt=(0.1, 0.5, 30, 50))
         st2.remove_response(pre_filt=(0.1, 0.5, 30, 50))
-        self.assertEqual(st1, st2)
+        # There is some strange issue on Appveyor. Thus we just use
+        # assert_allclose() here instead of testing for full equality.
+        # https://ci.appveyor.com/project/obspy/obspy/
+        #                                 builds/27495567/job/r4m7ely1nkjht20x
+        if platform.system() == "Windows":  # pragma: no cover
+            self.assertTrue(streams_almost_equal(st1, st2, atol=0, rtol=1e-6))
+        else:
+            self.assertEqual(st1, st2)
 
     def test_remove_sensitivity(self):
         """
@@ -2302,7 +2369,16 @@ class StreamTestCase(unittest.TestCase):
         for tr in st1:
             tr.remove_sensitivity()
         st2.remove_sensitivity()
-        self.assertEqual(st1, st2)
+        # Some Windows Appveyor CI runs have very minor differences..
+        # There is some strange issue on Win32bit (see #2188) and Win64bit
+        # (see #2330). Thus we just use assert_allclose() here instead of
+        # testing for full equality.
+        if platform.system() == "Windows":  # pragma: no cover
+            for tr1, tr2 in zip(st1, st2):
+                self.assertEqual(tr1.stats, tr2.stats)
+                np.testing.assert_allclose(tr1.data, tr2.data, rtol=1e-6)
+        else:
+            self.assertEqual(st1, st2)
 
     def test_interpolate(self):
         """
@@ -2655,6 +2731,99 @@ class StreamTestCase(unittest.TestCase):
                 st.write(bio, format=format_)
             self.assertEqual(e.exception.args[0],
                              'Can not write empty stream to file.')
+
+    def test_stack(self):
+        """
+        Tests stack method
+        """
+        # check number of traces and headers
+        # stack with default options
+        st = read()
+        st2 = st.copy().stack()
+        self.assertEqual(len(st2), 1)
+        self.assertIn('stack', st2[0].stats)
+        self.assertEqual(st2[0].stats.stack.group, 'all')
+        self.assertEqual(st2[0].stats.stack.count, 3)
+        self.assertEqual(st2[0].stats.stack.type, 'linear')
+        # stack by SEED id
+        st += st.copy()
+        st2 = st.copy().stack('id')
+        self.assertEqual(len(st2), 3)
+        self.assertEqual({tr.stats.stack.group for tr in st2},
+                         {tr.id for tr in st})
+        self.assertEqual({tr.id for tr in st2}, {tr.id for tr in st})
+        self.assertEqual(st2[0].stats.stack.count, 2)
+        # stack by other metadata
+        for tr in st[3:]:
+            tr.stats.station = 'OTH'
+        st2 = st.copy().stack('{network}.{station}')
+        self.assertEqual(len(st2), 2)
+        self.assertEqual(
+            {tr.stats.stack.group for tr in st2},
+            {'.'.join((tr.stats.network, tr.stats.station)) for tr in st})
+        self.assertEqual(st2[0].stats.stack.count, 3)
+
+        # check npts_tol option and correct npts of stack
+        st = read()
+        st[2].data = st[2].data[:-1]
+        npts = len(st[0])
+        # self.assertRaisesRegex(ValueError, 'number of points', st.stack)
+        self.assertRaises(ValueError, st.stack)
+        st2 = st.copy().stack(npts_tol=1)
+        self.assertEqual(len(st2), 1)
+        self.assertEqual(len(st2[0]), npts-1)
+        self.assertEqual(len(st[0]), npts)
+
+        # check correct setting of metadata
+        st = read()
+        st[0].stats.back_azimuth -= 10
+        st[0].stats.array1 = np.array([1, 2])
+        st[1].stats.array1 = np.array([1, 2, 3])
+        st[2].stats.array1 = 'no array here'
+        for tr in st:
+            tr.stats.array2 = np.array([3, 4])
+        st2 = st.copy().stack()
+        self.assertEqual(st2[0].stats.station, st[0].stats.station)
+        self.assertEqual(st2[0].stats.inclination, st[0].stats.inclination)
+        self.assertEqual(st2[0].stats.starttime, st[0].stats.starttime)
+        self.assertEqual(st2[0].stats.channel, '')
+        self.assertNotIn('back_azimuth', st2[0].stats)
+        self.assertNotIn('array1', st2[0].stats)
+        self.assertIn('array2', st2[0].stats)
+        st[1].stats.starttime += 10
+        st2 = st.copy().stack()
+        self.assertEqual(st2[0].stats.starttime, UTCDateTime(0))
+        st2 = st.copy().stack(time_tol=11)
+        self.assertEqual(st2[0].stats.starttime, st[0].stats.starttime)
+        st[0].stats.sampling_rate /= 10
+        # self.assertRaisesRegex(ValueError, 'Sampling rate', st.stack)
+        self.assertRaises(ValueError, st.stack)
+
+        # Check pw and root stacking types, these must result in the linear
+        # stack for order 0, resp. 1.
+        # For larger order pw stack is always of smaller magnitude than linear
+        # stack. For a root stack this is not always the case, but its
+        # magnitude is definitely smaller if all stacked samples have the
+        # same sign.
+        st = read()
+        st2 = st.copy().stack()
+        st3 = st.copy().stack(stack_type=('pw', 0))
+        st4 = st.copy().stack(stack_type=('root', 1))
+        self.assertEqual(len(st2), 1)
+        self.assertEqual(len(st3), 1)
+        self.assertEqual(len(st4), 1)
+        np.testing.assert_allclose(st3[0].data, st2[0].data)
+        np.testing.assert_allclose(st4[0].data, st2[0].data)
+        st3 = st.copy().stack(stack_type=('pw', 2))
+        st4 = st.copy().stack(stack_type=('root', 2))
+        self.assertEqual(np.sum(np.abs(st3[0].data) <= np.abs(st2[0].data)),
+                         npts)
+        all_data = np.array([tr.data for tr in st])
+        same_sign = np.logical_or(np.all(all_data < 0, axis=0),
+                                  np.all(all_data > 0, axis=0))
+        npts = np.sum(same_sign)
+        self.assertEqual(np.sum(np.abs(st4[0].data[same_sign]) <=
+                                np.abs(st2[0].data[same_sign])), npts)
 
 
 def suite():

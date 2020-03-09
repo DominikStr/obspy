@@ -13,6 +13,7 @@ from __future__ import (absolute_import, division, print_function,
 from future.builtins import *  # NOQA
 from future.utils import PY3, native_str
 
+import collections
 import copy
 import fnmatch
 import math
@@ -27,6 +28,7 @@ import numpy as np
 from obspy.core import compatibility
 from obspy.core.trace import Trace
 from obspy.core.utcdatetime import UTCDateTime
+from obspy.core.util.attribdict import AttribDict
 from obspy.core.util.base import (ENTRY_POINTS, _get_function_from_entry_point,
                                   _read_from_plugin, _generic_reader)
 from obspy.core.util.decorator import (map_example_filename,
@@ -1746,10 +1748,16 @@ class Stream(object):
             yield temp
 
     def select(self, network=None, station=None, location=None, channel=None,
-               sampling_rate=None, npts=None, component=None, id=None):
+               sampling_rate=None, npts=None, component=None, id=None,
+               inventory=None):
         """
         Return new Stream object only with these traces that match the given
         stats criteria (e.g. all traces with ``channel="EHZ"``).
+
+        Alternatively, traces can be selected based on the content of an
+        :class:`~obspy.core.inventory.inventory.Inventory` object: trace will
+        be selected if the inventory contains a matching channel active at the
+        trace start time.
 
         .. rubric:: Examples
 
@@ -1776,6 +1784,25 @@ class Stream(object):
         >>> print(st2)  # doctest: +NORMALIZE_WHITESPACE
         0 Trace(s) in Stream:
 
+        >>> from obspy import read_inventory
+        >>> inv = read_inventory('/path/to/BW_RJOB__EHZ.xml')
+        >>> print(inv)  # doctest: +NORMALIZE_WHITESPACE
+        Inventory created at 2013-12-07T18:00:42.878000Z
+                Created by: fdsn-stationxml-converter/1.0.0
+                            http://www.iris.edu/fdsnstationconverter
+                Sending institution: Erdbebendienst Bayern
+                Contains:
+                        Networks (1):
+                                BW
+                        Stations (1):
+                                BW.RJOB (Jochberg, Bavaria, BW-Net)
+                        Channels (1):
+                                BW.RJOB..EHZ
+        >>> st2 = st.select(inventory=inv)
+        >>> print(st2)  # doctest: +ELLIPSIS
+        1 Trace(s) in Stream:
+        BW.RJOB..EHZ | 2009-08-24T00:20:03.000000Z ... | 100.0 Hz, 3000 samples
+
         .. warning::
             A new Stream object is returned but the traces it contains are
             just aliases to the traces of the original stream. Does not copy
@@ -1795,16 +1822,51 @@ class Stream(object):
         All other selection criteria that accept strings (network, station,
         location) may also contain Unix style wildcards (``*``, ``?``, ...).
         """
+        if inventory is None:
+            traces = self.traces
+        else:
+            trace_ids = []
+            start_dates = []
+            end_dates = []
+            for net in inventory.networks:
+                for sta in net.stations:
+                    for chan in sta.channels:
+                        id = '.'.join((net.code, sta.code,
+                                       chan.location_code, chan.code))
+                        trace_ids.append(id)
+                        start_dates.append(chan.start_date)
+                        end_dates.append(chan.end_date)
+            traces = []
+            for trace in self:
+                idx = 0
+                while True:
+                    try:
+                        idx = trace_ids.index(trace.id, idx)
+                        start_date = start_dates[idx]
+                        end_date = end_dates[idx]
+                        idx += 1
+                        if start_date is not None and\
+                                trace.stats.starttime < start_date:
+                            continue
+                        if end_date is not None and\
+                                trace.stats.endtime > end_date:
+                            continue
+                        traces.append(trace)
+                    except ValueError:
+                        break
+        traces_after_inventory_filter = traces
+
         # make given component letter uppercase (if e.g. "z" is given)
-        if component and channel:
+        if component is not None and channel is not None:
             component = component.upper()
             channel = channel.upper()
-            if channel[-1] != "*" and component != channel[-1]:
+            if (channel[-1:] not in "?*" and component not in "?*" and
+                    component != channel[-1:]):
                 msg = "Selection criteria for channel and component are " + \
                       "mutually exclusive!"
                 raise ValueError(msg)
         traces = []
-        for trace in self:
+        for trace in traces_after_inventory_filter:
             # skip trace if any given criterion is not matched
             if id and not fnmatch.fnmatch(trace.id.upper(), id.upper()):
                 continue
@@ -1830,7 +1892,7 @@ class Stream(object):
             if npts is not None and int(npts) != trace.stats.npts:
                 continue
             if component is not None:
-                if not fnmatch.fnmatch(trace.stats.channel[-1].upper(),
+                if not fnmatch.fnmatch(trace.stats.component.upper(),
                                        component.upper()):
                     continue
             traces.append(trace)
@@ -3118,6 +3180,88 @@ seismometer_correction_simulation.html#using-a-resp-file>`_.
             tr.remove_sensitivity(*args, **kwargs)
         return self
 
+    def stack(self, group_by='all', stack_type='linear', npts_tol=0,
+              time_tol=0):
+        """
+        Stack traces by the same selected metadata.
+
+        The metadata of each trace (including starttime) corresponds to the
+        metadata of the original traces if those are the same.
+        Additionaly, the entry ``stack`` is written to the stats object(s).
+        It contains the fields ``group``
+        (result of the format operation on the ``group_by`` parameter),
+        ``count`` (number of stacked traces) and ``type``
+        (``stack_type`` argument).
+
+        :type group_by: str
+        :param group_by: Stack waveforms together which have the same metadata
+            given by this parameter. The parameter should name the
+            corresponding keys of the stats object,
+            e.g. ``'{network}.{station}'`` for stacking all
+            locations and channels of the stations and returning a stream
+            consisting of one stacked trace for each station.
+            This parameter can take two special values,
+            ``'id'`` which stacks the waveforms by SEED id and
+            ``'all'`` (default) which stacks together all traces in the stream.
+        :type stack_type: str or tuple
+        :param stack_type: Type of stack, one of the following:
+            ``'linear'``: average stack (default),
+            ``('pw', order)``: phase weighted stack of given order
+            (see [Schimmel1997]_, order 0 corresponds to linear stack),
+            ``('root', order)``: root stack of given order
+            (order 1 corresponds to linear stack).
+        :type npts_tol: int
+        :param npts_tol: Tolerate traces with different number of points
+            with a difference up to this value. Surplus samples are discarded.
+        :type time_tol: float (seconds)
+        :param time_tol: Tolerate difference in startime when setting the
+            new starttime of the stack. If starttimes differs more than this
+            value it will be set to timestamp 0.
+
+        >>> from obspy import read
+        >>> st = read()
+        >>> stack = st.stack()
+        >>> print(stack)  # doctest: +ELLIPSIS
+        1 Trace(s) in Stream:
+        BW.RJOB.. | 2009-08-24T00:20:03.000000Z - ... | 100.0 Hz, 3000 samples
+
+        .. note::
+
+            This operation is performed in place on the actual data arrays. The
+            raw data will no longer be accessible afterwards. To keep your
+            original data, use :meth:`~obspy.core.stream.Stream.copy` to create
+            a copy of your stream object.
+        """
+        from obspy.signal.util import stack as stack_func
+        groups = self._groupby(group_by)
+        stacks = []
+        for groupid, traces in groups.items():
+            header = {k: v for k, v in traces[0].stats.items()
+                      if all(np.all(tr.stats.get(k) == v) for tr in traces)}
+            header.pop('endtime', None)
+            if 'sampling_rate' not in header:
+                msg = 'Sampling rate of traces to stack is different'
+                raise ValueError(msg)
+            if 'starttime' not in header and time_tol > 0:
+                times = [tr.stats.starttime for tr in traces]
+                if np.ptp(times) <= time_tol:
+                    # use high median as starttime
+                    header['starttime'] = sorted(times)[len(times) // 2]
+            header['stack'] = AttribDict(group=groupid, count=len(traces),
+                                         type=stack_type)
+            npts_all = [len(tr) for tr in traces]
+            npts_dif = np.ptp(npts_all)
+            npts = min(npts_all)
+            if npts_dif > npts_tol:
+                msg = ('Difference of number of points of the traces is higher'
+                       ' than requested tolerance ({} > {})')
+                raise ValueError(msg.format(npts_dif, npts_tol))
+            data = np.array([tr.data[:npts] for tr in traces])
+            stack = stack_func(data, stack_type=stack_type)
+            stacks.append(traces[0].__class__(data=stack, header=header))
+        self.traces = stacks
+        return self
+
     @staticmethod
     def _dummy_stream_from_string(s):
         """
@@ -3211,6 +3355,26 @@ seismometer_correction_simulation.html#using-a-resp-file>`_.
                     "start": start, "end": end, "gaps": gaps,
                     "channels": channels_}
         return all_channels
+
+    def _groupby(self, group_by):
+        """
+        Group traces by same metadata.
+
+        :param group_by: Group traces together which have the same metadata
+            given by this parameter. The parameter should name the
+            corresponding keys of the stats object,
+            e.g. ``'{network}.{station}'``.
+            This parameter can take the value
+            ``'id'`` which groups the traces by SEED id.
+
+        :return: dictionary {group: stream}
+        """
+        if group_by == 'id':
+            group_by = '{network}.{station}.{location}.{channel}'
+        groups = collections.defaultdict(self.__class__)
+        for tr in self:
+            groups[group_by.format(**tr.stats)].append(tr)
+        return dict(groups)
 
     def _trim_common_channels(self):
         """

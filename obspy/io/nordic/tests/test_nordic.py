@@ -12,6 +12,8 @@ import io
 import os
 import unittest
 import warnings
+from itertools import cycle
+import numpy as np
 
 from obspy import read_events, Catalog, UTCDateTime, read
 from obspy.core.event import (
@@ -21,14 +23,16 @@ from obspy.core.event import (
     NodalPlane, NodalPlanes, ResourceIdentifier, Tensor)
 from obspy.core.util.base import NamedTemporaryFile
 from obspy.core.util.misc import TemporaryWorkingDirectory
+from obspy.core.util.testing import ImageComparison
 
 from obspy.io.nordic import NordicParsingError
 from obspy.io.nordic.core import (
     _is_sfile, read_spectral_info, read_nordic, readwavename, blanksfile,
-    _write_nordic, nordpick, readheader, _readheader,  write_select)
+    _write_nordic, nordpick, readheader, _readheader, write_select)
 from obspy.io.nordic.utils import (
     _int_conv, _float_conv, _str_conv, _nortoevmag, _evmagtonor,
     _get_line_tags)
+from obspy.io.nordic.ellipse import Ellipse
 
 
 class TestNordicMethods(unittest.TestCase):
@@ -54,9 +58,13 @@ class TestNordicMethods(unittest.TestCase):
         test_cat += test_event
         # Check the read-write s-file functionality
         with TemporaryWorkingDirectory():
-            sfile = _write_nordic(test_cat[0], filename=None, userid='TEST',
-                                  evtype='L', outdir='.', wavefiles='test',
-                                  explosion=True, overwrite=True)
+            with warnings.catch_warnings():
+                # Evaluation mode mapping warning
+                warnings.simplefilter('ignore', UserWarning)
+                sfile = _write_nordic(
+                    test_cat[0], filename=None, userid='TEST', evtype='L',
+                    outdir='.', wavefiles='test', explosion=True,
+                    overwrite=True)
             self.assertEqual(readwavename(sfile), ['test'])
             read_cat = Catalog()
             # raises "UserWarning: AIN in header, currently unsupported"
@@ -70,7 +78,12 @@ class TestNordicMethods(unittest.TestCase):
             self.assertEqual(read_pick.backazimuth, test_pick.backazimuth)
             self.assertEqual(read_pick.onset, test_pick.onset)
             self.assertEqual(read_pick.phase_hint, test_pick.phase_hint)
-            self.assertEqual(read_pick.polarity, test_pick.polarity)
+            if test_pick.polarity == "undecidable":
+                self.assertIsNone(read_pick.polarity)
+            elif read_pick.polarity == "undecidable":
+                self.assertIsNone(test_pick.polarity)
+            else:
+                self.assertEqual(read_pick.polarity, test_pick.polarity)
             self.assertEqual(read_pick.waveform_id.station_code,
                              test_pick.waveform_id.station_code)
             self.assertEqual(read_pick.waveform_id.channel_code[-1],
@@ -134,10 +147,8 @@ class TestNordicMethods(unittest.TestCase):
         self.assertEqual(read_ev.amplitudes[1].waveform_id.station_code,
                          test_ev.amplitudes[1].waveform_id.station_code)
         self.assertEqual(read_ev.amplitudes[1].waveform_id.channel_code,
-                         test_ev.amplitudes[1].
-                         waveform_id.channel_code[0] +
-                         test_ev.amplitudes[1].
-                         waveform_id.channel_code[-1])
+                         test_ev.amplitudes[1].waveform_id.channel_code[0] +
+                         test_ev.amplitudes[1].waveform_id.channel_code[-1])
         self.assertEqual(read_ev.amplitudes[1].magnitude_hint,
                          test_ev.amplitudes[1].magnitude_hint)
         # snr is not supported in s-file
@@ -158,52 +169,66 @@ class TestNordicMethods(unittest.TestCase):
         test_cat.append(full_test_event())
         with self.assertRaises(NordicParsingError):
             # Raises error due to multiple events in catalog
-            _write_nordic(test_cat, filename=None, userid='TEST',
-                          evtype='L', outdir='.',
-                          wavefiles='test', explosion=True,
-                          overwrite=True)
+            with warnings.catch_warnings():
+                # Evaluation mode mapping warning
+                warnings.simplefilter('ignore', UserWarning)
+                _write_nordic(test_cat, filename=None, userid='TEST',
+                              evtype='L', outdir='.',
+                              wavefiles='test', explosion=True,
+                              overwrite=True)
         with self.assertRaises(NordicParsingError):
             # Raises error due to too long userid
-            _write_nordic(test_ev, filename=None, userid='TESTICLE',
-                          evtype='L', outdir='.',
-                          wavefiles='test', explosion=True,
-                          overwrite=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', UserWarning)
+                _write_nordic(test_ev, filename=None, userid='TESTICLE',
+                              evtype='L', outdir='.',
+                              wavefiles='test', explosion=True,
+                              overwrite=True)
         with self.assertRaises(NordicParsingError):
             # Raises error due to unrecognised event type
-            _write_nordic(test_ev, filename=None, userid='TEST',
-                          evtype='U', outdir='.',
-                          wavefiles='test', explosion=True,
-                          overwrite=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', UserWarning)
+                _write_nordic(test_ev, filename=None, userid='TEST',
+                              evtype='U', outdir='.',
+                              wavefiles='test', explosion=True,
+                              overwrite=True)
         with self.assertRaises(NordicParsingError):
             # Raises error due to no output directory
-            _write_nordic(test_ev, filename=None, userid='TEST',
-                          evtype='L', outdir='albatross',
-                          wavefiles='test', explosion=True,
-                          overwrite=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', UserWarning)
+                _write_nordic(test_ev, filename=None, userid='TEST',
+                              evtype='L', outdir='albatross',
+                              wavefiles='test', explosion=True,
+                              overwrite=True)
         invalid_origin = test_ev.copy()
 
         invalid_origin.origins = []
         with self.assertRaises(NordicParsingError):
-            _write_nordic(invalid_origin, filename=None, userid='TEST',
-                          evtype='L', outdir='.',
-                          wavefiles='test', explosion=True,
-                          overwrite=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', UserWarning)
+                _write_nordic(invalid_origin, filename=None, userid='TEST',
+                              evtype='L', outdir='.', wavefiles='test',
+                              explosion=True, overwrite=True)
         invalid_origin = test_ev.copy()
         invalid_origin.origins[0].time = None
         with self.assertRaises(NordicParsingError):
-            _write_nordic(invalid_origin, filename=None, userid='TEST',
-                          evtype='L', outdir='.',
-                          wavefiles='test', explosion=True,
-                          overwrite=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', UserWarning)
+                _write_nordic(invalid_origin, filename=None, userid='TEST',
+                              evtype='L', outdir='.', wavefiles='test',
+                              explosion=True, overwrite=True)
         # Write a near empty origin
         valid_origin = test_ev.copy()
         valid_origin.origins[0].latitude = None
         valid_origin.origins[0].longitude = None
         valid_origin.origins[0].depth = None
         with NamedTemporaryFile() as tf:
-            _write_nordic(valid_origin, filename=tf.name, userid='TEST',
-                          evtype='L', outdir='.', wavefiles='test',
-                          explosion=True, overwrite=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', UserWarning)
+                _write_nordic(
+                    valid_origin, filename=tf.name, userid='TEST',
+                    evtype='L', outdir='.', wavefiles='test',
+                    explosion=True, overwrite=True)
             self.assertTrue(os.path.isfile(tf.name))
 
     def test_blanksfile(self):
@@ -366,10 +391,15 @@ class TestNordicMethods(unittest.TestCase):
         sfiles = []
         with TemporaryWorkingDirectory():
             for _i in range(59):
-                sfiles.append(_write_nordic(event=event, filename=None,
-                                            overwrite=False))
+                with warnings.catch_warnings():
+                    # Evaluation mode mapping warning
+                    warnings.simplefilter('ignore', UserWarning)
+                    sfiles.append(_write_nordic(event=event, filename=None,
+                                                overwrite=False))
             with self.assertRaises(NordicParsingError):
-                _write_nordic(event=event, filename=None, overwrite=False)
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore', UserWarning)
+                    _write_nordic(event=event, filename=None, overwrite=False)
 
     def test_mag_conv(self):
         """
@@ -400,6 +430,9 @@ class TestNordicMethods(unittest.TestCase):
         testing_path = os.path.join(self.testing_path, '01-0411-15L.S201309')
         wavefiles = readwavename(testing_path)
         self.assertEqual(len(wavefiles), 1)
+        # Check that read_nordic reads wavname when return_wavnames=True
+        cat, wavefiles = read_nordic(testing_path, return_wavnames=True)
+        self.assertEqual(wavefiles, [['2013-09-01-0410-35.DFDPC_024_00']])
         # Test that full paths are handled
         test_event = full_test_event()
         # Add the event to a catalogue which can be used for QuakeML testing
@@ -407,17 +440,22 @@ class TestNordicMethods(unittest.TestCase):
         test_cat += test_event
         # Check the read-write s-file functionality
         with TemporaryWorkingDirectory():
-            sfile = _write_nordic(
-                test_cat[0], filename=None, userid='TEST', evtype='L',
-                outdir='.', wavefiles=['walrus/test'], explosion=True,
-                overwrite=True)
+            with warnings.catch_warnings():
+                # Evaluation mode mapping warning
+                warnings.simplefilter('ignore', UserWarning)
+                sfile = _write_nordic(
+                    test_cat[0], filename=None, userid='TEST', evtype='L',
+                    outdir='.', wavefiles=['walrus/test'], explosion=True,
+                    overwrite=True)
             self.assertEqual(readwavename(sfile), ['test'])
         # Check that multiple wavefiles are read properly
         with TemporaryWorkingDirectory():
-            sfile = _write_nordic(
-                test_cat[0], filename=None, userid='TEST', evtype='L',
-                outdir='.', wavefiles=['walrus/test', 'albert'],
-                explosion=True, overwrite=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', UserWarning)
+                sfile = _write_nordic(
+                    test_cat[0], filename=None, userid='TEST', evtype='L',
+                    outdir='.', wavefiles=['walrus/test', 'albert'],
+                    explosion=True, overwrite=True)
             self.assertEqual(readwavename(sfile), ['test', 'albert'])
 
     def test_read_event(self):
@@ -633,7 +671,10 @@ class TestNordicMethods(unittest.TestCase):
         event = full_test_event()
         event.origins[0].longitude = -120
         with NamedTemporaryFile(suffix=".out") as tf:
-            event.write(tf.name, format="NORDIC")
+            with warnings.catch_warnings():
+                # Evaluation mode mapping warning
+                warnings.simplefilter('ignore', UserWarning)
+                event.write(tf.name, format="NORDIC")
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore', UserWarning)
                 event_back = read_events(tf.name)
@@ -647,7 +688,10 @@ class TestNordicMethods(unittest.TestCase):
         event.origins.append(preferred_origin)
         event.preferred_origin_id = preferred_origin.resource_id
         with NamedTemporaryFile(suffix=".out") as tf:
-            event.write(tf.name, format="NORDIC")
+            with warnings.catch_warnings():
+                # Evaluation mode mapping warning
+                warnings.simplefilter('ignore', UserWarning)
+                event.write(tf.name, format="NORDIC")
             with warnings.catch_warnings():
                 # Type I warning
                 warnings.simplefilter('ignore', UserWarning)
@@ -761,7 +805,10 @@ class TestNordicMethods(unittest.TestCase):
         self.assertGreater(
             event.picks[0].time.date, event.origins[0].time.date)
         with NamedTemporaryFile(suffix=".out") as tf:
-            write_select(Catalog([event]), filename=tf.name)
+            with warnings.catch_warnings():
+                # Evaluation mode mapping warning
+                warnings.simplefilter('ignore', UserWarning)
+                write_select(Catalog([event]), filename=tf.name)
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore', UserWarning)
                 event_back = read_events(tf.name)[0]
@@ -795,16 +842,268 @@ class TestNordicMethods(unittest.TestCase):
             self.assertEqual(len(pick), 1)
             self.assertEqual(pick[0].time, value)
 
+    def test_read_high_accuracy(self):
+        """
+        Verify that high-accuracy locations are read, if present
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', UserWarning)
+            cat = read_events(
+                os.path.join(self.testing_path, "sfile_highaccuracy"))
+        event = cat[0]
+        event_time = event.origins[0].time
+        event_lat = event.origins[0].latitude
+        event_lon = event.origins[0].longitude
+        event_depth = event.origins[0].depth
+        event_rms = event.origins[0].quality.standard_error
+        self.assertEqual(event_time,
+                         UTCDateTime(2015, 4, 24, 15, 25, 37) + 0.676)
+        self.assertEqual(event_lat, 37.29242)
+        self.assertEqual(event_lon, -32.26983)
+        self.assertEqual(event_depth, 1969.)
+        self.assertEqual(event_rms, 0.051)
 
-def _assert_similarity(event_1, event_2, verbose=False):
+    def test_ellipse_from__to_uncerts(self):
+        """
+        Verify ellipse is properly calculated and inverted using uncertainties
+
+        tests Ellipse.from_uncerts and Ellipse.to_uncerts()
+        """
+        center = (20, 30)
+        # First try simple cases without correlation
+        x_errs = (0.5, 1.33, 1.0)
+        y_errs = (1.33, 0.5, 1.0)
+        for c_xy in [0, 0.2, 0.4, 0.6]:
+            for (x_err, y_err) in zip(x_errs, y_errs):
+                ell = Ellipse.from_uncerts(x_err, y_err, c_xy, center)
+                (x_err_out, y_err_out, c_xy_out, center_out) = ell.to_uncerts()
+                self.assertAlmostEqual(x_err, x_err_out)
+                self.assertAlmostEqual(y_err, y_err_out)
+                self.assertAlmostEqual(c_xy, c_xy_out)
+                self.assertAlmostEqual(center, center_out)
+        # Now a specific case with a finite covariance
+        x_err = 0.5
+        y_err = 1.1
+        c_xy = -0.2149
+        # Calculate ellipse
+        ell = Ellipse.from_uncerts(x_err, y_err, c_xy, center)
+        self.assertAlmostEqual(ell.a, 1.120674193646)
+        self.assertAlmostEqual(ell.b, 0.451762494786)
+        self.assertAlmostEqual(ell.theta, 167.9407699)
+        # Calculate covariance error from ellipse
+        (x_err_out, y_err_out, c_xy_out, center_out) = ell.to_uncerts()
+        self.assertAlmostEqual(x_err, x_err_out)
+        self.assertAlmostEqual(y_err, y_err_out)
+        self.assertAlmostEqual(c_xy, c_xy_out)
+        self.assertAlmostEqual(center, center_out)
+
+    def test_ellipse_from_to_cov(self):
+        """
+        Verify ellipse is properly calculated and inverted using covariance
+
+        tests Ellipse.from_uncerts and Ellipse.to_uncerts()
+        """
+        center = (20, 30)
+        x_err = 0.5
+        y_err = 1.1
+        c_xy = -0.2149
+        cov = [[x_err**2, c_xy], [c_xy, y_err**2]]
+        # Calculate ellipse
+        ell = Ellipse.from_cov(cov, center)
+        self.assertAlmostEqual(ell.a, 1.120674193646)
+        self.assertAlmostEqual(ell.b, 0.451762494786)
+        self.assertAlmostEqual(ell.theta, 167.9407699)
+        # Calculate covariance error from ellipse
+        cov_out, center_out = ell.to_cov()
+        self.assertAlmostEqual(cov[0][0], cov_out[0][0])
+        self.assertAlmostEqual(cov[0][1], cov_out[0][1])
+        self.assertAlmostEqual(cov[1][0], cov_out[1][0])
+        self.assertAlmostEqual(cov[1][1], cov_out[1][1])
+
+    def test_ellipse_from_uncerts_baz(self, debug=False):
+        """
+        Verify alternative ellipse creator
+
+        tests Ellipse.from_uncerts_baz
+        """
+        # Now a specific case with a finite covariance
+        x_err = 0.5
+        y_err = 1.1
+        c_xy = -0.2149
+        dist = 10
+        baz = 90
+        viewpoint = (5, 5)
+        # Calculate ellipse
+        ell = Ellipse.from_uncerts_baz(x_err, y_err, c_xy,
+                                       dist, baz, viewpoint)
+        self.assertAlmostEqual(ell.a, 1.120674193646)
+        self.assertAlmostEqual(ell.b, 0.451762494786)
+        self.assertAlmostEqual(ell.theta, 167.9407699)
+        self.assertAlmostEqual(ell.x, 15)
+        self.assertAlmostEqual(ell.y, 5)
+        baz = 180
+        ell = Ellipse.from_uncerts_baz(x_err, y_err, c_xy,
+                                       dist, baz, viewpoint)
+        self.assertAlmostEqual(ell.x, 5)
+        self.assertAlmostEqual(ell.y, -5)
+
+    def test_ellipse_is_inside(self, debug=False):
+        """
+        Verify Ellipse.is_inside()
+        """
+        ell = Ellipse(20, 10, 90)
+        self.assertIs(ell.is_inside((0, 0)), True)
+        self.assertFalse(ell.is_inside((100, 100)))
+        self.assertTrue(ell.is_inside((-19.9, 0)))
+        self.assertTrue(ell.is_inside((19.9, 0)))
+        self.assertFalse(ell.is_inside((-20.1, 0)))
+        self.assertFalse(ell.is_inside((20.1, 0)))
+        self.assertTrue(ell.is_inside((0, 9.9)))
+        self.assertTrue(ell.is_inside((0, -9.9)))
+        self.assertFalse(ell.is_inside((0, 10.1)))
+        self.assertFalse(ell.is_inside((0, -10.1)))
+
+    def test_ellipse_is_on(self, debug=False):
+        """
+        Verify Ellipse.is_on()
+        """
+        ell = Ellipse(20, 10, 90)
+        self.assertFalse(ell.is_on((0, 0)))
+        self.assertFalse(ell.is_on((100, 100)))
+        self.assertTrue(ell.is_on((-20, 0)))
+        self.assertTrue(ell.is_on((20, 0)))
+        self.assertFalse(ell.is_on((-20.1, 0)))
+        self.assertFalse(ell.is_on((20.1, 0)))
+        self.assertTrue(ell.is_on((0, 10)))
+        self.assertTrue(ell.is_on((0, -10)))
+        self.assertFalse(ell.is_on((0, 10.1)))
+        self.assertFalse(ell.is_on((0, -10.1)))
+
+    def test_ellipse_subtended_angle(self, debug=False):
+        """
+        Verify Ellipse.subtended_angle()
+        """
+        ell = Ellipse(20, 10, 90)
+        self.assertAlmostEqual(ell.subtended_angle((20, 0)), 180.)
+        self.assertAlmostEqual(ell.subtended_angle((0, 0)), 360.)
+        self.assertAlmostEqual(ell.subtended_angle((40, 0)), 32.2042275039720)
+        self.assertAlmostEqual(ell.subtended_angle((0, 40)), 54.6234598480584)
+        self.assertAlmostEqual(ell.subtended_angle((20, 10)), 89.9994270422)
+
+    def test_ellipse_plot(self):
+        """
+        Test Ellipse.plot()
+
+        To generate test figures, used same commands after:
+        from ellipse import Ellipse
+        import matplotlib.pyplot as plt
+        plt.style.use('classic')
+        """
+        # Test single ellipse
+        with ImageComparison(self.testing_path, 'plot_ellipse.png',
+                             style='classic', reltol=10) as ic:
+            Ellipse(20, 10, 90).plot(outfile=ic.name)
+        # Test multi-ellipse figure
+        with ImageComparison(self.testing_path, 'plot_ellipses.png',
+                             style='classic', reltol=10) as ic:
+            fig = Ellipse(20, 10, 90).plot(color='r')
+            fig = Ellipse(20, 10, 45).plot(fig=fig, color='b')
+            fig = Ellipse(20, 10, 0, center=(10, 10)).plot(fig=fig, color='g')
+            fig = Ellipse(20, 10, -45).plot(fig=fig, outfile=ic.name)
+
+    def test_ellipse_plot_tangents(self):
+        """
+        Test Ellipse.plot_tangents()
+        """
+        import matplotlib.pyplot as plt
+        # Test single ellipse and point
+        with ImageComparison(self.testing_path, 'plot_ellipse_tangents.png',
+                             style='classic', reltol=10) as ic:
+            Ellipse(20, 10, 90).plot_tangents((30, 30),
+                                              color='b',
+                                              print_angle=True,
+                                              ellipse_name='Ellipse',
+                                              outfile=ic.name)
+        # Test multi-ellipse figure
+        dist = 50
+        fig = None
+        try:
+            prop_cycle = plt.rcParams['axes.prop_cycle']
+        # prop_cycle was introduced at some point between mpl 1.x and 2.0 it
+        # seems
+        # XXX workaround can be removed when mpl is bumped to certain version
+        except KeyError:
+            colors = plt.rcParams['axes.color_cycle']
+        else:
+            colors = prop_cycle.by_key()['color']
+        color_cycle = cycle(colors)
+        step = 45
+        with ImageComparison(self.testing_path, 'plot_ellipses_tangents.png',
+                             style='classic', reltol=15) as ic:
+            for angle in range(step, 360 + step - 1, step):
+                x = dist * np.sin(np.radians(angle))
+                y = dist * np.cos(np.radians(angle))
+                ell = Ellipse(20, 10, 90, center=(x, y))
+                if angle == 360:
+                    outfile = ic.name
+                else:
+                    outfile = None
+                fig = ell.plot_tangents((0, 0),
+                                        fig=fig,
+                                        color=next(color_cycle),
+                                        print_angle=True,
+                                        ellipse_name='E{:d}'.format(angle),
+                                        outfile=outfile)
+        # Test multi-station figure
+        fig = None
+        color_cycle = cycle(colors)
+        with ImageComparison(self.testing_path,
+                             'plot_ellipse_tangents_pts.png',
+                             style='classic',
+                             reltol=15) as ic:
+            for angle in range(step, 360 + step - 1, step):
+                x = dist * np.sin(np.radians(angle))
+                y = dist * np.cos(np.radians(angle))
+                ell = Ellipse(20, 10, 90)
+                if angle == 360:
+                    outfile = ic.name
+                else:
+                    outfile = None
+                fig = ell.plot_tangents((x, y),
+                                        fig=fig,
+                                        color=next(color_cycle),
+                                        print_angle=True,
+                                        pt_name='pt{:d}'.format(angle),
+                                        outfile=outfile)
+
+    def test_read_uncert_ellipse(self):
+        """
+        Verify that confidence ellipse is properly read/calculated from nordic
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', UserWarning)
+            cat = read_events(
+                os.path.join(self.testing_path, "sfile_highaccuracy"))
+        event = cat[0]
+        val = event.origins[0].origin_uncertainty
+        hor_max = val['max_horizontal_uncertainty']
+        hor_min = val['min_horizontal_uncertainty']
+        azi_max = val['azimuth_max_horizontal_uncertainty']
+        self.assertAlmostEqual(hor_max, 1120.674193646)
+        self.assertAlmostEqual(hor_min, 451.762494786)
+        self.assertAlmostEqual(azi_max, 167.9407699)
+
+
+def _assert_similarity(event_1, event_2):
     """
     Raise AssertionError if testing similarity fails
     """
-    if not _test_similarity(event_1, event_2, verbose=verbose):
-        raise AssertionError('Events failed similarity check')
+    similarity_output = _test_similarity(event_1, event_2)
+    if similarity_output:
+        raise AssertionError(similarity_output)
 
 
-def _test_similarity(event_1, event_2, verbose=False):
+def _test_similarity(event_1, event_2):
     """
     Check the similarity of the components of obspy events, discounting
     resource IDs, which are not maintained in nordic files.
@@ -818,6 +1117,9 @@ def _test_similarity(event_1, event_2, verbose=False):
     :type verbose: bool
     :param verbose: If true and fails will output why it fails.
     """
+    # What None maps to.
+    pick_default_mapper = {
+        "polarity": "undecidable", "evaluation_mode": "manual"}
     # Check origins
     if len(event_1.origins) != len(event_2.origins):
         return False
@@ -828,101 +1130,78 @@ def _test_similarity(event_1, event_2, verbose=False):
                            "quality", "creation_info", "evaluation_mode",
                            "depth_errors", "time_errors"]:
                 if ori_1[key] != ori_2[key]:
-                    if verbose:
-                        print('%s is not the same as %s for key %s' %
-                              (ori_1[key], ori_2[key], key))
-                    return False
+                    return ('%s is not the same as %s for key %s' %
+                            (ori_1[key], ori_2[key], key))
             elif key == "arrivals":
                 if len(ori_1[key]) != len(ori_2[key]):
-                    print('%i is not the same as %i for key %s' %
-                          (len(ori_1[key]), len(ori_2[key]), key))
-                    return False
+                    return ('%i is not the same as %i for key %s' %
+                            (len(ori_1[key]), len(ori_2[key]), key))
                 for arr_1, arr_2 in zip(ori_1[key], ori_2[key]):
                     for arr_key in arr_1.keys():
                         if arr_key not in ["resource_id", "pick_id",
                                            "distance"]:
                             if arr_1[arr_key] != arr_2[arr_key]:
-                                if verbose:
-                                    print('%s does not match %s for key %s' %
-                                          (arr_1[arr_key], arr_2[arr_key],
-                                           arr_key))
-                                return False
+                                return ('%s does not match %s for key %s' %
+                                        (arr_1[arr_key], arr_2[arr_key],
+                                         arr_key))
                     if arr_1["distance"] and round(
                             arr_1["distance"]) != round(arr_2["distance"]):
-                        if verbose:
-                            print('%s does not match %s for key %s' %
-                                  (arr_1[arr_key], arr_2[arr_key],
-                                   arr_key))
-                        return False
+                        return ('%s does not match %s for key %s' %
+                                (arr_1[arr_key], arr_2[arr_key],
+                                 arr_key))
     # Check picks
     if len(event_1.picks) != len(event_2.picks):
-        if verbose:
-            print('Number of picks is not equal')
-        return False
+        return 'Number of picks is not equal'
     for pick_1, pick_2 in zip(event_1.picks, event_2.picks):
         # Assuming same ordering of picks...
         for key in pick_1.keys():
             if key not in ["resource_id", "waveform_id"]:
                 if pick_1[key] != pick_2[key]:
-                    if verbose:
-                        print('%s is not the same as %s for key %s' %
-                              (pick_1[key], pick_2[key], key))
-                    return False
+                    default = pick_default_mapper.get(key, None)
+                    if pick_1[key] is None:
+                        if pick_2[key] == default:
+                            continue
+                    elif pick_2[key] is None:
+                        if pick_1[key] == default:
+                            continue
+                    return ('%s is not the same as %s for key %s' %
+                            (pick_1[key], pick_2[key], key))
             elif key == "waveform_id":
                 if pick_1[key].station_code != pick_2[key].station_code:
-                    if verbose:
-                        print('Station codes do not match')
-                    return False
+                    return 'Station codes do not match'
                 if pick_1[key].channel_code[0] != pick_2[key].channel_code[0]:
-                    if verbose:
-                        print('Channel codes do not match')
-                    return False
+                    return 'Channel codes do not match'
                 if pick_1[key].channel_code[-1] !=\
                    pick_2[key].channel_code[-1]:
-                    if verbose:
-                        print('Channel codes do not match')
-                    return False
+                    return 'Channel codes do not match'
     # Check amplitudes
     if not len(event_1.amplitudes) == len(event_2.amplitudes):
-        if verbose:
-            print('Not the same number of amplitudes')
-        return False
+        return 'Not the same number of amplitudes'
     for amp_1, amp_2 in zip(event_1.amplitudes, event_2.amplitudes):
         # Assuming same ordering of amplitudes
         for key in amp_1.keys():
             if key not in ["resource_id", "pick_id", "waveform_id", "snr",
                            "magnitude_hint", 'type']:
                 if not amp_1[key] == amp_2[key]:
-                    if verbose:
-                        print('%s is not the same as %s for key %s' %
-                              (amp_1[key], amp_2[key], key))
-                        print(amp_1)
-                        print(amp_2)
-                    return False
+                    return ("{0} is not the same as {1} for key "
+                            "{2}\n{3}\n{4}".format(
+                                amp_1[key], amp_2[key], key, amp_1, amp_2))
             elif key == "waveform_id":
                 if pick_1[key].station_code != pick_2[key].station_code:
-                    if verbose:
-                        print('Station codes do not match')
-                    return False
+                    return 'Station codes do not match'
                 if pick_1[key].channel_code[0] != pick_2[key].channel_code[0]:
-                    if verbose:
-                        print('Channel codes do not match')
-                    return False
+                    return 'Channel codes do not match'
                 if pick_1[key].channel_code[-1] !=\
-                   pick_2[key].channel_code[-1]:
-                    if verbose:
-                        print('Channel codes do not match')
-                    return False
+                        pick_2[key].channel_code[-1]:
+                    return 'Channel codes do not match'
             elif key in ["magnitude_hint", "type"]:
                 # Reading back in will define both, but input event might have
                 # None
                 if amp_1[key] is not None:
                     if not amp_1[key] == amp_2[key]:
-                        if verbose:
-                            print('%s is not the same as %s for key %s' %
-                                  (amp_1[key], amp_2[key], key))
-                        return False
-    return True
+                        return ('%s is not the same as %s for key %s' %
+                                (amp_1[key], amp_2[key], key))
+    return None
 
 
 def full_test_event():
@@ -967,7 +1246,16 @@ def full_test_event():
              evaluation_mode="manual"),
         Pick(waveform_id=_waveform_id_2, onset='impulsive', phase_hint='PN',
              polarity='undecidable', time=UTCDateTime("2012-03-26") + 1.62,
-             evaluation_mode="automatic")]
+             evaluation_mode="automatic"),
+        # Missing info shouldn't be an issue
+        Pick(waveform_id=_waveform_id_2, onset=None, phase_hint='PN',
+             polarity=None, time=UTCDateTime("2012-03-26") + 1.92,
+             evaluation_mode=None),
+        # Long-phase
+        Pick(waveform_id=_waveform_id_2, onset='impulsive', phase_hint='PKiKP',
+             polarity=None, time=UTCDateTime("2012-03-26") + 1.92,
+             evaluation_mode=None),
+    ]
     # Test a generic local magnitude amplitude pick
     test_event.amplitudes = [
         Amplitude(generic_amplitude=2.0, period=0.4,
@@ -993,7 +1281,16 @@ def full_test_event():
         Arrival(time_weight=2, phase=test_event.picks[4].phase_hint,
                 pick_id=test_event.picks[4].resource_id,
                 backazimuth_residual=5, time_residual=0.2, distance=15,
-                azimuth=25, takeoff_angle=170)]
+                azimuth=25, takeoff_angle=170),
+        Arrival(time_weight=2, phase=test_event.picks[5].phase_hint,
+                pick_id=test_event.picks[5].resource_id,
+                backazimuth_residual=5, time_residual=0.2, distance=15,
+                azimuth=25, takeoff_angle=170),
+        Arrival(time_weight=0, phase=test_event.picks[6].phase_hint,
+                pick_id=test_event.picks[6].resource_id,
+                backazimuth_residual=5, time_residual=0.2, distance=15,
+                azimuth=25, takeoff_angle=170),
+    ]
     # Add in error info (line E)
     test_event.origins[0].quality = OriginQuality(
         standard_error=0.01, azimuthal_gap=36)

@@ -34,13 +34,14 @@ from obspy import UTCDateTime, read
 from obspy.geodetics import kilometers2degrees, degrees2kilometers
 from obspy.core.event import (
     Event, Origin, Magnitude, Catalog, EventDescription, CreationInfo,
-    OriginQuality, Pick, WaveformStreamID, Arrival, Amplitude,
-    FocalMechanism, MomentTensor, NodalPlane, NodalPlanes, QuantityError,
-    Tensor, ResourceIdentifier)
+    OriginQuality, OriginUncertainty, Pick, WaveformStreamID, Arrival,
+    Amplitude, FocalMechanism, MomentTensor, NodalPlane, NodalPlanes,
+    QuantityError, Tensor, ResourceIdentifier)
 from obspy.io.nordic import NordicParsingError
 from obspy.io.nordic.utils import (
     _int_conv, _str_conv, _float_conv, _evmagtonor, _nortoevmag,
-    _get_line_tags)
+    _get_line_tags, _km_to_deg_lat, _km_to_deg_lon)
+from obspy.io.nordic.ellipse import Ellipse
 
 
 POLARITY_MAPPING = {"": "undecidable", "C": "positive", "D": "negative"}
@@ -430,10 +431,11 @@ def _extract_event(event_str, catalog, wav_names, return_wavnames=False):
     tagged_lines = _get_line_tags(f=tmp_sfile)
     new_event = _readheader(head_lines=tagged_lines['1'])
     new_event = _read_uncertainty(tagged_lines, new_event)
+    new_event = _read_highaccuracy(tagged_lines, new_event)
     new_event = _read_focal_mechanisms(tagged_lines, new_event)
     new_event = _read_moment_tensors(tagged_lines, new_event)
     if return_wavnames:
-        wav_names.append(_readwavename(f=tmp_sfile))
+        wav_names.append(_readwavename(tagged_lines=tagged_lines['6']))
     new_event = _read_picks(tagged_lines=tagged_lines, new_event=new_event)
     catalog += new_event
     return catalog, wav_names
@@ -442,6 +444,11 @@ def _extract_event(event_str, catalog, wav_names, return_wavnames=False):
 def _read_uncertainty(tagged_lines, event):
     """
     Read hyp uncertainty line.
+
+    :param tagged_lines: Lines keyed by line type
+    :type tagged_lines: dict
+    :returns: updated event
+    :rtype: :class:`~obspy.core.event.event.Event`
     """
     if 'E' not in tagged_lines.keys():
         return event
@@ -451,24 +458,105 @@ def _read_uncertainty(tagged_lines, event):
     # TODO: Convert this to ConfidenceEllipsoid
     errors = {'x_err': None}
     try:
-        errors = {'x_err': float(line[24:30]), 'y_err': float(line[32:38]),
-                  'z_err': float(line[38:43]), 'xy_cov': float(line[43:55]),
-                  'xz_cov': float(line[55:67]), 'yz_cov': float(line[67:79])}
+        errors = {'x_err': _float_conv(line[24:30]),
+                  'y_err': _float_conv(line[32:38]),
+                  'z_err': _float_conv(line[38:43]),
+                  'xy_cov': _float_conv(line[43:55]),
+                  'xz_cov': _float_conv(line[55:67]),
+                  'yz_cov': _float_conv(line[67:79])}
     except ValueError:
         pass
-    if errors['x_err']:
-        warnings.warn("Hypocentral Error estimates found, but not converted.")
+    orig = event.origins[0]
+    if errors['x_err'] is not None:
+        e = Ellipse.from_uncerts(errors['x_err'],
+                                 errors['y_err'],
+                                 errors['xy_cov'])
+        orig.origin_uncertainty = OriginUncertainty(
+            max_horizontal_uncertainty=e.a * 1000.,
+            min_horizontal_uncertainty=e.b * 1000.,
+            azimuth_max_horizontal_uncertainty=e.theta,
+            preferred_description="uncertainty ellipse")
+        orig.latitude_errors = QuantityError(
+            _km_to_deg_lat(errors['y_err']))
+        orig.longitude_errors = QuantityError(
+            _km_to_deg_lon(errors['x_err'], orig.latitude))
+        orig.depth_errors = QuantityError(errors['z_err'] * 1000.)
     try:
-        event.origins[0].quality = OriginQuality(
-            azimuthal_gap=int(line[5:8]), standard_error=float(line[14:20]))
+        gap = int(line[5:8])
+    except ValueError:
+        gap = None
+    try:
+        orig.time_errors = QuantityError(float(line[14:20]))
     except ValueError:
         pass
+    if orig.quality:
+        orig.quality.azimuthal_gap = gap
+    else:
+        orig.quality = OriginQuality(azimuthal_gap=gap)
+    return event
+
+
+def _read_highaccuracy(tagged_lines, event):
+    """
+    Read high accuracy origin line.
+
+    :param tagged_lines: Lines keyed by line type
+    :type tagged_lines: dict
+    :returns: updated event
+    :rtype: :class:`~obspy.core.event.event.Event`
+    """
+    if 'H' not in tagged_lines.keys():
+        return event
+    # In principle there shouldn't be more than one high precision line
+    line = tagged_lines['H'][0][0]
+    try:
+        dt = {'Y': _int_conv(line[1:5]),
+              'MO': _int_conv(line[6:8]),
+              'D': _int_conv(line[8:10]),
+              'H': _int_conv(line[11:13]),
+              'MI': _int_conv(line[13:15]),
+              'S': _float_conv(line[16:23])}
+    except ValueError:
+        pass
+    try:
+        ev_time = UTCDateTime(dt['Y'], dt['MO'], dt['D'],
+                              dt['H'], dt['MI'], 0, 0) + dt['S']
+        if abs(event.origins[0].time - ev_time) < 0.1:
+            event.origins[0].time = ev_time
+        else:
+            print('High accuracy time differs from normal time by >0.1s')
+    except ValueError:
+        pass
+    try:
+        values = {'latitude': _float_conv(line[23:32]),
+                  'longitude': _float_conv(line[33:43]),
+                  'depth': _float_conv(line[44:52]),
+                  'rms': _float_conv(line[53:59])}
+    except ValueError:
+        pass
+    if values['latitude'] is not None:
+        event.origins[0].latitude = values['latitude']
+    if values['longitude'] is not None:
+        event.origins[0].longitude = values['longitude']
+    if values['depth'] is not None:
+        event.origins[0].depth = values['depth'] * 1000.
+    if values['rms'] is not None:
+        if event.origins[0].quality is not None:
+            event.origins[0].quality.standard_error = values['rms']
+        else:
+            event.origins[0].quality = OriginQuality(
+                standard_error=values['rms'])
     return event
 
 
 def _read_focal_mechanisms(tagged_lines, event):
     """
     Read focal mechanism info from s-file
+
+    :param tagged_lines: Lines keyed by line type
+    :type tagged_lines: dict
+    :returns: updated event
+    :rtype: :class:`~obspy.core.event.event.Event`
     """
     if 'F' not in tagged_lines.keys():
         return event
@@ -499,6 +587,14 @@ def _read_focal_mechanisms(tagged_lines, event):
 
 
 def _read_moment_tensors(tagged_lines, event):
+    """
+    Read moment tensors from s-file
+
+    :param tagged_lines: Lines keyed by line type
+    :type tagged_lines: dict
+    :returns: updated event
+    :rtype: :class:`~obspy.core.event.event.Event`
+    """
     if 'M' not in tagged_lines.keys():
         return event
     # Group moment tensor lines together
@@ -575,6 +671,8 @@ def _read_picks(tagged_lines, new_event):
         weight = line[14]
         if weight not in ' 012349_':  # Long phase name
             weight = line[8]
+            if weight == ' ':
+                weight = 0
             phase = line[10:17].strip()
             polarity = ''
         elif weight == '_':
@@ -586,7 +684,8 @@ def _read_picks(tagged_lines, new_event):
             polarity = line[16]
             if weight == ' ':
                 weight = 0
-        polarity = POLARITY_MAPPING.get(polarity, "undecidable")
+        polarity = POLARITY_MAPPING.get(polarity, None)  # Empty could be None
+        # or undecidable.
         # It is valid nordic for the origin to be hour 23 and picks to be hour
         # 00 or 24: this signifies a pick over a day boundary.
         pick_hour = int(line[18:20])
@@ -700,23 +799,27 @@ def readwavename(sfile, encoding='latin-1'):
     :rtype: list
     """
     with open(sfile, 'r', encoding=encoding) as f:
-        wavenames = _readwavename(f=f)
+        tagged_lines = _get_line_tags(f=f)
+        if len(tagged_lines['6']) == 0:
+            msg = ('No waveform files in sfile %s' % sfile)
+            warnings.warn(msg)
+        wavenames = _readwavename(tagged_lines=tagged_lines['6'])
     return wavenames
 
 
-def _readwavename(f):
+def _readwavename(tagged_lines):
     """
     Internal wave-name reader.
 
-    :type f: file
-    :param f: File open in read-mode
+    :type tagged_lines: list
+    :param tagged_lines:
+        List of tuples of (strings, line-number) of the waveform lines.
 
     :return: list of wave-file names
     """
     wavename = []
-    for line in f:
-        if len(line) == 81 and line[79] == '6':
-            wavename.append(line[1:79].strip())
+    for line in tagged_lines:
+        wavename.append(line[0][1:79].strip())
     return wavename
 
 
@@ -1305,7 +1408,7 @@ def nordpick(event, high_accuracy=True):
         if len(amplitude) > 0:
             if len(amplitude) > 1:
                 msg = 'Nordic files need one pick for each amplitude, ' + \
-                      'using the first amplitude only'
+                    'using the first amplitude only'
                 warnings.warn(msg)
             amplitude = amplitude[0]
             # Determine type of amplitude
@@ -1349,6 +1452,7 @@ def nordpick(event, high_accuracy=True):
         if eval_mode is None:
             warnings.warn("Evaluation mode {0} is not mappable".format(
                 pick.evaluation_mode))
+            eval_mode = " "
         # Generate a print string and attach it to the list
         channel_code = pick.waveform_id.channel_code or '   '
         pick_hour = pick.time.hour
@@ -1374,7 +1478,7 @@ def nordpick(event, high_accuracy=True):
                 polarity.rjust(1) + ' ')
         pick_string_formatter = (
             " {station:5s}{instrument:1s}{component:1s}{phase_info:10s}"
-            "{hour:2d}{minute:2d}{seconds:6s}{coda:5s}{amp:7s}{period:5s}"
+            "{hour:2d}{minute:2d}{seconds:>6s}{coda:5s}{amp:7s}{period:5s}"
             "{azimuth:6s}{velocity:5s}{ain:4s}{azimuthres:3s}{timeres:5s}  "
             "{distance:5s}{caz:4s} ")
         # Note that pick seconds rounding only works because SEISAN does not

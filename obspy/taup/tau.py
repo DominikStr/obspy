@@ -300,6 +300,15 @@ class Arrivals(list):
         if phase_list is None:
             phase_list = ("ttall",)
 
+        requested_phase_names = parse_phase_list(phase_list)
+        requested_phase_name_map = {}
+        i = 0
+        for phase_name in requested_phase_names:
+            if phase_name in requested_phase_name_map:
+                continue
+            requested_phase_name_map[phase_name] = i
+            i += 1
+
         phase_names = sorted(parse_phase_list(phase_list))
         arrivals = []
         for arrival in self:
@@ -346,17 +355,22 @@ class Arrivals(list):
 
             intp = matplotlib.cbook.simple_linear_interpolation
             radius = self.model.radius_of_planet
+            phase_names_encountered = {ray.name for ray in arrivals}
+            colors = {
+                name: COLORS[i % len(COLORS)]
+                for name, i in requested_phase_name_map.items()}
+            i = len(colors)
+            for name in sorted(phase_names_encountered):
+                if name in colors:
+                    continue
+                colors[name] = COLORS[i % len(COLORS)]
+                i += 1
             for ray in arrivals:
-                if ray.name in phase_names:
-                    # Requires interpolation,or diffracted phases look funny.
-                    ax.plot(intp(ray.path["dist"], 100),
-                            radius - intp(ray.path["depth"], 100),
-                            color=COLORS[phase_names.index(ray.name) %
-                                         len(COLORS)], label=ray.name, lw=2.0)
-                else:
-                    ax.plot(intp(ray.path["dist"], 100),
-                            radius - intp(ray.path["depth"], 100),
-                            color='k', label=ray.name, lw=2.0)
+                color = colors.get(ray.name, 'k')
+                # Requires interpolation,or diffracted phases look funny.
+                ax.plot(intp(ray.path["dist"], 100),
+                        radius - intp(ray.path["depth"], 100),
+                        color=color, label=ray.name, lw=2.0)
                 ax.set_yticks(radius - discons)
                 ax.xaxis.set_major_formatter(plt.NullFormatter())
                 ax.yaxis.set_major_formatter(plt.NullFormatter())
@@ -483,8 +497,8 @@ class Arrivals(list):
             possible_distances = [_i for _i in possible_distances
                                   if x[0] <= _i <= x[1]]
             if possible_distances:
-                ax.plot(possible_distances, [arrivals[0].receiver_depth]
-                        * len(possible_distances),
+                ax.plot(possible_distances,
+                        [arrivals[0].receiver_depth] * len(possible_distances),
                         marker="v", color="#C95241",
                         markersize=ms, zorder=10, markeredgewidth=1.5,
                         markeredgecolor="0.3", clip_on=False, lw=0,

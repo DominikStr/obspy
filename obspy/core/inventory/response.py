@@ -26,6 +26,7 @@ import scipy.interpolate
 
 from .. import compatibility
 from obspy.core.util.base import ComparingObject
+from obspy.core.util.deprecation_helpers import ObsPyDeprecationWarning
 from obspy.core.util.obspy_types import (ComplexWithUncertainties,
                                          FloatWithUncertainties,
                                          FloatWithUncertaintiesAndUnit,
@@ -344,10 +345,10 @@ class CoefficientsTypeResponseStage(ResponseStage):
 
         The function tries to match inputs to one of three types if it can.
     :type numerator: list of
-        :class:`~obspy.core.util.obspy_types.FloatWithUncertaintiesAndUnit`
+        :class:`~obspy.core.util.obspy_types.CoefficientWithUncertainties`
     :param numerator: Numerator of the coefficient response stage.
     :type denominator: list of
-        :class:`~obspy.core.util.obspy_types.FloatWithUncertaintiesAndUnit`
+        :class:`~obspy.core.util.obspy_types.CoefficientWithUncertainties`
     :param denominator: Denominator of the coefficient response stage.
     """
     def __init__(self, stage_sequence_number, stage_gain,
@@ -405,9 +406,12 @@ class CoefficientsTypeResponseStage(ResponseStage):
             return
         value = list(value) if isinstance(
             value, compatibility.collections_abc.Iterable) else [value]
+        if any(getattr(x, 'unit', None) is not None for x in value):
+            msg = 'Setting Numerator/Denominator with a unit is deprecated.'
+            warnings.warn(msg, ObsPyDeprecationWarning)
         for _i, x in enumerate(value):
-            if not isinstance(x, FloatWithUncertaintiesAndUnit):
-                value[_i] = FloatWithUncertaintiesAndUnit(x)
+            if not isinstance(x, CoefficientWithUncertainties):
+                value[_i] = CoefficientWithUncertainties(x)
         self._numerator = value
 
     @property
@@ -421,9 +425,12 @@ class CoefficientsTypeResponseStage(ResponseStage):
             return
         value = list(value) if isinstance(
             value, compatibility.collections_abc.Iterable) else [value]
+        if any(getattr(x, 'unit', None) is not None for x in value):
+            msg = 'Setting Numerator/Denominator with a unit is deprecated.'
+            warnings.warn(msg, ObsPyDeprecationWarning)
         for _i, x in enumerate(value):
-            if not isinstance(x, FloatWithUncertaintiesAndUnit):
-                value[_i] = FloatWithUncertaintiesAndUnit(x)
+            if not isinstance(x, CoefficientWithUncertainties):
+                value[_i] = CoefficientWithUncertainties(x)
         self._denominator = value
 
     @property
@@ -658,6 +665,8 @@ class PolynomialResponseStage(ResponseStage):
                  decimation_input_sample_rate=None, decimation_factor=None,
                  decimation_offset=None, decimation_delay=None,
                  decimation_correction=None):
+        # XXX remove stage_gain and stage_gain_frequency completely, since
+        # changes in StationXML 1.1?
         self._approximation_type = approximation_type
         self.frequency_lower_bound = frequency_lower_bound
         self.frequency_upper_bound = frequency_upper_bound
@@ -665,6 +674,9 @@ class PolynomialResponseStage(ResponseStage):
         self.approximation_upper_bound = approximation_upper_bound
         self.maximum_error = maximum_error
         self.coefficients = coefficients
+        # XXX StationXML 1.1 does not allow stage gain in Polynomial response
+        # stages. Maybe we should we warn here.. but this could get very
+        # verbose when reading StationXML 1.0 files, so maybe not
         super(PolynomialResponseStage, self).__init__(
             stage_sequence_number=stage_sequence_number,
             input_units=input_units,
@@ -1652,7 +1664,11 @@ class Response(ComparingObject):
         # Calculate the output frequencies.
         fy = 1 / (t_samp * 2.0)
         # start at zero to get zero for offset/ DC of fft
-        freqs = np.linspace(0, fy, nfft // 2 + 1).astype(np.float64)
+        # numpy 1.9 introduced a dtype kwarg
+        try:
+            freqs = np.linspace(0, fy, int(nfft // 2) + 1, dtype=np.float64)
+        except Exception:
+            freqs = np.linspace(0, fy, int(nfft // 2) + 1).astype(np.float64)
 
         response = self.get_evalresp_response_for_frequencies(
             freqs, output=output, start_stage=start_stage, end_stage=end_stage)
@@ -1789,7 +1805,7 @@ class Response(ComparingObject):
 
         t_samp = 1.0 / sampling_rate
         nyquist = sampling_rate / 2.0
-        nfft = sampling_rate / min_freq
+        nfft = int(sampling_rate / min_freq)
 
         cpx_response, freq = self.get_evalresp_response(
             t_samp=t_samp, nfft=nfft, output=output, start_stage=start_stage,
@@ -1889,6 +1905,44 @@ class Response(ComparingObject):
         # extract paz
         paz = self.get_paz()
         return paz_to_sacpz_string(paz, self.instrument_sensitivity)
+
+    @classmethod
+    def from_paz(cls, zeros, poles, stage_gain,
+                 stage_gain_frequency=1.0, input_units='M/S',
+                 output_units='VOLTS', normalization_frequency=1.0,
+                 pz_transfer_function_type='LAPLACE (RADIANS/SECOND)',
+                 normalization_factor=1.0):
+        """
+        Convert poles and zeros lists into a single-stage response.
+
+        Takes in lists of complex poles and zeros and returns a Response with
+        those values defining its only stage. Most of the optional parameters
+        defined here are from
+        :class:`~obspy.core.inventory.response.PolesZerosResponseStage`.
+
+        :type zeros: list of complex
+        :param zeros: All zeros of the response to be defined.
+        :type poles: list of complex
+        :param poles: All poles of the response to be defined.
+        :type stage_gain: float
+        :param stage_gain: The gain value of the response [sensitivity]
+        :returns: new Response instance with given P-Z values
+        """
+        pzstage = PolesZerosResponseStage(
+            stage_sequence_number=1, stage_gain=stage_gain,
+            stage_gain_frequency=stage_gain_frequency,
+            input_units=input_units, output_units=output_units,
+            pz_transfer_function_type=pz_transfer_function_type,
+            normalization_frequency=normalization_frequency,
+            zeros=zeros, poles=poles,
+            normalization_factor=normalization_factor)
+        sens = InstrumentSensitivity(value=stage_gain,
+                                     frequency=stage_gain_frequency,
+                                     input_units=input_units,
+                                     output_units=output_units)
+        resp = cls(instrument_sensitivity=sens, response_stages=[pzstage])
+        resp.recalculate_overall_sensitivity()
+        return resp
 
 
 def paz_to_sacpz_string(paz, instrument_sensitivity):

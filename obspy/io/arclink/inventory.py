@@ -379,7 +379,8 @@ def _read_channel(inventory_root, cha_element):
     if sensor_element is not None:
         response_id = sensor_element.get("response")
         if response_id is not None:
-            resp_type = response_id.split("#")[0]
+            # Fix #2552
+            resp_type = response_id.replace("#", "/").split("/")[0]
             if resp_type == 'ResponsePAZ':
                 search = "responsePAZ[@publicID='" + response_id + "']"
                 response_element = inventory_root.find(_ns(search))
@@ -409,7 +410,7 @@ def _read_channel(inventory_root, cha_element):
     numerator = _attr2obj(cha_element, "sampleRateNumerator", int)
     denominator = _attr2obj(cha_element, "sampleRateDenominator", int)
 
-    rate = numerator/denominator
+    rate = numerator / denominator
 
     channel.sample_rate_ratio_number_samples = numerator
     channel.sample_rate_ratio_number_seconds = denominator
@@ -423,7 +424,7 @@ def _read_channel(inventory_root, cha_element):
                          ClockDrift)
         if channel.sample_rate != 0.0:
             channel.clock_drift_in_seconds_per_sample = \
-                _read_float_var(temp/channel.sample_rate, ClockDrift)
+                _read_float_var(temp / channel.sample_rate, ClockDrift)
         else:
             msg = "Clock drift division by sample rate of 0: using sec/sample"
             warnings.warn(msg)
@@ -431,7 +432,11 @@ def _read_channel(inventory_root, cha_element):
 
     channel.azimuth = _attr2obj(cha_element, "azimuth", Azimuth)
     channel.dip = _attr2obj(cha_element, "dip", Dip)
-    channel.storage_format = _attr2obj(cha_element, "format", str)
+    # storage format of channel not supported by StationXML1.1 anymore, keep it
+    # as a foreign tag to be nice if anybody needs to access it
+    channel.extra = {'format': {
+        'value': _tag2obj(cha_element, _ns("format"), str),
+        'namespace': SCHEMA_NAMESPACE}}
 
     if channel.sample_rate == 0.0:
         msg = "Something went hopelessly wrong, found sampling-rate of 0!"

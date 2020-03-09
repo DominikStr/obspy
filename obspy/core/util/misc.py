@@ -258,7 +258,7 @@ def get_untracked_files_from_git():
         git_root_dir = p.decode().strip()
         if git_root_dir:
             git_root_dir = os.path.abspath(git_root_dir)
-        if git_root_dir != dir_:
+        if os.path.normcase(git_root_dir) != os.path.normcase(dir_):
             raise ValueError('Git root directory (%s) does not match expected '
                              'path (%s).' % (git_root_dir, dir_))
         p = check_output(['git', 'status', '-u', '--porcelain'],
@@ -543,13 +543,17 @@ class MatplotlibBackend(object):
         successfully. If ``False``, additionally tries to use
         :func:`matplotlib.use` first and also shows a warning if the backend
         was not switched successfully.
+    :type close: bool
+    :param close: Whether to close all matplotlib figures when exiting the
+        context manager.
     """
 
-    def __init__(self, backend, sloppy=True):
+    def __init__(self, backend, sloppy=True, close=False):
         self.temporary_backend = backend
         self.sloppy = sloppy
         import matplotlib
         self.previous_backend = matplotlib.get_backend()
+        self.close = close
 
     def __enter__(self):
         if self.temporary_backend is None:
@@ -557,6 +561,9 @@ class MatplotlibBackend(object):
         self.switch_backend(backend=self.temporary_backend, sloppy=self.sloppy)
 
     def __exit__(self, exc_type, exc_val, exc_tb):  # @UnusedVariable
+        if self.close:
+            import matplotlib.pyplot as plt
+            plt.close('all')
         if self.temporary_backend is None:
             return
         self.switch_backend(backend=self.previous_backend, sloppy=self.sloppy)

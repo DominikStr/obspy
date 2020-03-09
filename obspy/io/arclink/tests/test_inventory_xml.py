@@ -21,9 +21,10 @@ from future.builtins import *  # NOQA
 import inspect
 import os
 import unittest
+import warnings
 
 from obspy.core.inventory import read_inventory
-from obspy.io.arclink.inventory import validate_arclink_xml
+from obspy.io.arclink.inventory import validate_arclink_xml, SCHEMA_NAMESPACE
 
 
 class ArclinkInventoryTestCase(unittest.TestCase):
@@ -41,6 +42,10 @@ class ArclinkInventoryTestCase(unittest.TestCase):
                                              "arclink_inventory_poly.xml")
         self.arclink_afc_path = os.path.join(self.data_dir, "arclink_afc.xml")
         self.station_afc_path = os.path.join(self.data_dir, "station_afc.xml")
+
+    def test_publicid_slash(self):
+        v = read_inventory(os.path.join(self.data_dir, "public-id-slash.xml"))
+        self.assertEqual(len(v[0][0][0].response.response_stages), 11)
 
     def test_analogue_filter_chain(self):
         """
@@ -101,7 +106,15 @@ class ArclinkInventoryTestCase(unittest.TestCase):
                 self.assertEqual(arc.sample_rate, st_xml.sample_rate)
                 self.assertEqual(arc.start_date, st_xml.start_date)
                 self.assertEqual(arc.end_date, st_xml.end_date)
-                self.assertEqual(arc.storage_format, st_xml.storage_format)
+                # reading stationxml will ignore old StationXML 1.0 defined
+                # StorageFormat, Arclink Inventory XML and SC3ML get it stored
+                # in extra now
+                with warnings.catch_warnings(record=True):
+                    self.assertEqual(st_xml.storage_format, None)
+                    self.assertEqual(arc.storage_format, None)
+                self.assertEqual(
+                    arc.extra['format'],
+                    {'namespace': SCHEMA_NAMESPACE, 'value': None})
 
                 cdisps = "clock_drift_in_seconds_per_sample"
                 self.assertEqual(getattr(arc, cdisps), getattr(st_xml, cdisps))
