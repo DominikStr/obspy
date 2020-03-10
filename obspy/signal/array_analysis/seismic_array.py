@@ -7,10 +7,6 @@ Seismic array class.
     GNU Lesser General Public License, Version 3
     (https://www.gnu.org/copyleft/lesser.html)
 """
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-from future.builtins import *  # NOQA
-
 from collections import defaultdict
 import collections
 import copy
@@ -88,10 +84,8 @@ class SeismicArray(object):
     contain any seismic data. The locations of the array components
     (stations or channels) must be set in the respective objects (for an
     overview of the inventory system, see :mod:`~obspy.core.inventory`).
-    While the inventory must be composed of
-    :class:`~obspy.core.inventory.station.Station` and/or
-    :class:`~obspy.core.inventory.channel.Channel` objects, they do not need
-    to represent actual seismic stations; their only required attribute is
+    While the inventory must be composed of :class:`~obspy.core.inventory.channel.Channel` objects,
+    they do not need to represent actual seismic stations; their only required attribute is
     the location information.
 
     :param name: Array name.
@@ -117,6 +111,12 @@ class SeismicArray(object):
     """
 
     def __init__(self, name, inventory):
+        """
+        :param name: Name of this Array.
+        :type name: str
+        :param inventory: Inventory containing the stations used for the array.
+        :type inventory: :class:`~obspy.core.inventory.inventory.Inventory`
+        """
         if not isinstance(name, str):
             raise TypeError("Name must be a string.")
         self.name = name
@@ -157,6 +157,7 @@ class SeismicArray(object):
 
         :param st: :class:`~obspy.core.stream.Stream` to which the array
             inventory should correspond.
+        :type st: :class:`~obspy.core.stream.Stream`
         """
         inv = self.inventory
         # check what station/channel IDs are in the data
@@ -257,10 +258,11 @@ class SeismicArray(object):
             plt.show()
         return fig
 
-    def _get_geometry(self):
+    @property
+    def geometry(self):
         """
-        Return a dictionary of latitude, longitude and absolute height
-        [km] for each component in the array inventory.
+        A dictionary of latitude, longitude and absolute height [km] values
+        for each item in the array inventory.
 
         For every component in the array inventory (channels if available,
         stations otherwise), a SEED ID string with the format
@@ -268,7 +270,7 @@ class SeismicArray(object):
         assembled. This is one key for the returned dictionary, while the value
         is a dictionary of the component's coordinates.
 
-        :return: A dictionary with keys: SEED IDs and values: dictionaries of
+        :return A dictionary with keys: SEED IDs and values: dictionaries of
             'latitude', 'longitude' and 'absolute_height_in_km'.
         """
         if not self.inventory:
@@ -303,7 +305,7 @@ class SeismicArray(object):
                             {"latitude": float(channel.latitude),
                              "longitude": float(channel.longitude),
                              "absolute_height_in_km":
-                              float(channel.elevation-channel.depth) / 1000.0}
+                             float(channel.elevation - channel.depth) / 1000.0}
                         geo[item_code] = this_coordinates
         return geo
 
@@ -314,6 +316,9 @@ class SeismicArray(object):
 
         The geometrical centre is the mid-point of the maximum array extent in
         each direction.
+
+        :return A dictionary with keys: latitude, longitude and
+        absolute_height_in_km:
         """
         extent = self.extent
         return {
@@ -333,29 +338,15 @@ class SeismicArray(object):
 
         The centre of gravity is calculated as the mean of the array stations'
         locations in each direction.
+
+        :return A dictionary with keys: latitude, longitude and
+        absolute_height_in_km:
         """
         lats, lngs, hgts = self._coordinate_values()
         return {
             "latitude": np.mean(lats),
             "longitude": np.mean(lngs),
             "absolute_height_in_km": np.mean(hgts)}
-
-    @property
-    def geometry(self):
-        """
-        A dictionary of latitude, longitude and absolute height [km] values
-        for each item in the array inventory.
-
-        For every component in the array inventory (channels if available,
-        stations otherwise), a SEED ID string with the format
-        'network.station.location.channel', leaving any unknown parts blank, is
-        assembled. This is one key for the returned dictionary, while the value
-        is a dictionary of the component's coordinates.
-
-        :return A dictionary with keys: SEED IDs and values: dictionaries of
-            'latitude', 'longitude' and 'absolute_height_in_km'.
-        """
-        return self._get_geometry()
 
     @property
     def aperture(self):
@@ -375,7 +366,6 @@ class SeismicArray(object):
                     coordinates["latitude"], coordinates["longitude"],
                     other_coordinates["latitude"],
                     other_coordinates["longitude"])[0] / 1000.0)
-
         return max(distances)
 
     @property
@@ -383,6 +373,10 @@ class SeismicArray(object):
         """
         Dictionary of the array's minimum and maximum lat/long and elevation
         values.
+
+        :return A dictionary with keys: min_latitude, max_latitude,
+        min_longitude, max_longitude, min_absolute_height_in_km and
+        max_absolute_height_in_km:
         """
         lats, lngs, hgt = self._coordinate_values()
 
@@ -561,7 +555,7 @@ class SeismicArray(object):
     def vespagram(self, stream, event_or_baz, sll, slm, sls, starttime,
                   endtime, reference='center_of_gravity', method="DLS",
                   nthroot=1, static3d=False, vel_cor=4.0, wiggle_scale=1.0,
-                  align=False, align_phase=['P', 'Pdiff'],
+                  align=False, align_phase=('P', 'Pdiff'),
                   density_cmap=obspy_sequential, plot="wiggle", show=True):
         """
         :type event_or_baz: float or :class:`~obspy.core.event.event.Event` or
@@ -611,6 +605,8 @@ class SeismicArray(object):
                 msg = "For the align option an event has to be specified"
                 raise ValueError(msg)
 
+        if type(align_phase) == str:
+            align_phase = (align_phase,)
         if align:
             for item in align_phase:
                 stream = self.align_phases(stream, origin_, item)
@@ -637,7 +633,7 @@ class SeismicArray(object):
             sampling_rate = stream[0].stats.sampling_rate
             delta = 1 / sampling_rate
             npts = len(beams[0])
-            t = np.arange(0, npts / sampling_rate, delta)
+            t = np.linspace(0, npts*delta, npts)
             max_amp = np.max(np.abs(beams))
             scale = sls / max_amp
             scale *= wiggle_scale
@@ -663,9 +659,10 @@ class SeismicArray(object):
                           slownesses[0] - sls * 0.5,
                           slownesses[-1] + sls * 0.5)
 
-                ax.imshow(np.flipud(beams), cmap=density_cmap,
+                col = ax.imshow(np.flipud(beams), cmap=density_cmap,
                           interpolation="nearest", extent=extent,
                           aspect='auto')
+                plt.colorbar(col)
 
             ax.set_ylabel('slowness [s/deg]')
             ax.set_xlabel('Time [s]')
@@ -1988,8 +1985,7 @@ class SeismicArray(object):
             ax = fig.add_subplot(1, 1, 1, projection='polar')
             cmap = plt.cm.get_cmap('viridis')
             contf = ax.contourf(theo_backazi, u,
-                                beamres.T, 40, cmap=cmap, antialiased=True,
-                                linstyles='dotted')
+                                beamres.T, 40, cmap=cmap, antialiased=True)
             ax.contour(theo_backazi, u,
                        beamres.T, 40, cmap=cmap)
             ax.set_theta_zero_location('N')
@@ -2338,10 +2334,10 @@ class SeismicArray(object):
                 nhigh = min(nfft / 2 - 1, nhigh)  # avoid using nyquist
                 nf = nhigh - nlow + 1  # include upper and lower frequency
 
-                steer = np.empty((nf, grdpts_x, grdpts_y, nstat), dtype='c16')
-                spec = np.zeros((nstat, nf), dtype='c16')
+                steer = np.empty((int(nf), grdpts_x, grdpts_y, nstat), dtype='c16')
+                spec = np.zeros((nstat, int(nf)), dtype='c16')
                 time_shift_table *= -1.
-                clibsignal.calcSteer(nstat, grdpts_x, grdpts_y, nf, nlow,
+                clibsignal.calcSteer(nstat, grdpts_x, grdpts_y, int(nf), nlow,
                                      deltaf, time_shift_table, steer)
                 try:
                     for i in range(nstat):
@@ -2350,13 +2346,13 @@ class SeismicArray(object):
 
                         tap = cosine_taper(nsamp, p=0.22)
                         dat = (dat - dat.mean()) * tap
-                        spec[i, :] = np.fft.rfft(dat, nfft)[nlow: nlow + nf]
+                        spec[i, :] = np.fft.rfft(dat, nfft)[int(nlow): int(nlow + nf)]
                 except IndexError:
                     break
 
                 for i in range(grdpts_x):
                     for j in range(grdpts_y):
-                        for k in range(nf):
+                        for k in range(int(nf)):
                             for l in range(nstat):
                                 steer[k, i, j, l] *= spec[l, k]
 
@@ -2559,13 +2555,16 @@ class SeismicArray(object):
         n = v[:, -1]
         result[:, 0] = (geometry[:, 0] - n[0] * (
                 n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
-                geometry[:, 2]) / (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
+                geometry[:, 2]) /
+                        (n[0] * n[0] + n[1] * n[1] + n[2] * n[2])**0.5)
         result[:, 1] = (geometry[:, 1] - n[1] * (
                 n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
-                geometry[:, 2]) / (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
+                geometry[:, 2]) /
+                        (n[0] * n[0] + n[1] * n[1] + n[2] * n[2])**0.5)
         result[:, 2] = (geometry[:, 2] - n[2] * (
                 n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
-                geometry[:, 2]) / (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]))
+                geometry[:, 2]) /
+                        (n[0] * n[0] + n[1] * n[1] + n[2] * n[2])**0.5)
         geometry = result[:]
         # print("Best fitting plane-coordinates :\n", geometry)
 
