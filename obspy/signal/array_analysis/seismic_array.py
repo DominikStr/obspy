@@ -558,23 +558,60 @@ class SeismicArray(object):
                   align=False, align_phase=('P', 'Pdiff'),
                   density_cmap=obspy_sequential, plot="wiggle", show=True):
         """
+        :param stream: Stream containing all traces of the array.
+        :type stream: :class:`~obspy.core.stream.Stream`.
         :type event_or_baz: float or :class:`~obspy.core.event.event.Event` or
             :class:`~obspy.core.event.origin.Origin`
         :param event_or_baz: Backazimuth for vespagram or event/origin object
             to calculate theoretical backazimuth from.
+        :type sll: float
+        :param sll: Lower slowness boundary.
+        :type slm: float
+        :param slm: Maximum slowness boundary.
+        :type sls: float
+        :param sls: Slowness step.
+        :type starttime: :class:`~obspy.core.utcdatetime.UTCDateTime`
+        :param starttime: Beginn of analysed sequence.
+        :type endtime: :class:`~obspy.core.utcdatetime.UTCDateTime`
+        :param endtime: End of analysed sequence.
         :type reference: str or dict
         :param reference: Determines what is used as reference origin. Either
             ``'center_of_gravity'``, ``'geometrical_center'`` or a dictionary
             with keys ``'latitude'``, ``'longitude'``, ``'elevation'``
             (elevation in meters).
+        :type method: str
+        :param method: Method used to stack traces. Can be either 'DLS' or 'PWS':
+                        DLS: delay and sum
+                        PWS: phase-weighted stack
+        :type nthroot: float
+        :param nthroot: Root used in th summation process.
+        :type static3d: bool
+        :param static3d: a correction of the station height is applied using
+            vel_cor the correction is done according to the formula:
+            t = rxy*s - rz*cos(inc)/vel_cor
+            where inc is defined by inv = asin(vel_cor*slow)
+        :param vel_cor: float or dict
+        :param vel_cor: correction velocity (upper layer) in km/s. May be given
+            at each station as a dictionary with the station/channel IDs as
+            keys (same as in self.geometry).
         :type wiggle_scale: float
-        :param wiggle_scale: Relative scaling for wiggle plot (unused for
-            density plot).
+        :param wiggle_scale: Relative scaling for wiggle plot (unused for density plot).
+        :type align: bool
+        :param align: Whether traces should be aligned with theoretical arrival given by align_phase.
+        :type align_phase: str
+        :param align_phase: Phase name given in usual convention by which traces should be aligned.
+        :type density_cmap: :class:`~matplotlib.colors.Colormap`
+        :param density_cmap: Colormap used for density plot.
         :type plot: str or None
         :param plot: Whether to create a plot or not. Can be either
             ``'wiggle'``, ``'density'``, or ``None``.
         :type show: bool
         :param show: Whether to open the plot (if any) interactively or not.
+        :returns slow: Slowness with highest coherency.
+                 beams: :class:`numpy.ndarray` with beam for each slowness step.
+                 beam_max: Inde of beam with maximum coherency.
+                 max_beam: :class:`numpy.ndarray` of beam with maximum coherency.
+                 fig: :class:`matplotlib.pyplot.figure` of vespagramm.
         """
         if reference == 'center_of_gravity':
             center_ = self.center_of_gravity
@@ -605,11 +642,8 @@ class SeismicArray(object):
                 msg = "For the align option an event has to be specified"
                 raise ValueError(msg)
 
-        if type(align_phase) == str:
-            align_phase = (align_phase,)
         if align:
-            for item in align_phase:
-                stream = self.align_phases(stream, origin_, item)
+            stream = self.align_phases(stream, origin_, align_phase)
 
         time_shift_table = self._get_timeshift_baz(
             sll, slm, sls, baz, latitude=center_['latitude'],
