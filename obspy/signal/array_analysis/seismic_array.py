@@ -136,7 +136,7 @@ class SeismicArray(object):
             aperture=self.aperture)
         return ret_str
 
-    def inventory_cull(self, st):
+    def inventory_cull(self, stream):
         """
         Shrink array inventory to channels present in the given stream.
 
@@ -155,13 +155,13 @@ class SeismicArray(object):
         >>> from copy import deepcopy #doctest: +SKIP
         >>> original_inventory = deepcopy(array.inventory) #doctest: +SKIP
 
-        :param st: :class:`~obspy.core.stream.Stream` to which the array
+        :param stream: :class:`~obspy.core.stream.Stream` to which the array
             inventory should correspond.
-        :type st: :class:`~obspy.core.stream.Stream`
+        :type stream: :class:`~obspy.core.stream.Stream`
         """
         inv = self.inventory
         # check what station/channel IDs are in the data
-        stations_present = list(set(tr.id for tr in st))
+        stations_present = list(set(tr.id for tr in stream))
         # delete all channels that are not represented
         for k, netw in reversed(list(enumerate(inv.networks))):
             for j, stn in reversed(list(enumerate(netw.stations))):
@@ -173,7 +173,7 @@ class SeismicArray(object):
                         continue
                         # Also remove if it doesn't cover the time of the
                         # trace:
-                    for tr in st.select(network=netw.code, station=stn.code,
+                    for tr in stream.select(network=netw.code, station=stn.code,
                                         location=cha.location_code,
                                         channel=cha.code):
                         if not cha.is_active(starttime=tr.stats.starttime,
@@ -313,7 +313,6 @@ class SeismicArray(object):
     def geometrical_center(self):
         """
         Return the geometrical centre as dictionary.
-
         The geometrical centre is the mid-point of the maximum array extent in
         each direction.
 
@@ -335,7 +334,6 @@ class SeismicArray(object):
     def center_of_gravity(self):
         """
         Return the centre of gravity as a dictionary.
-
         The centre of gravity is calculated as the mean of the array stations'
         locations in each direction.
 
@@ -352,9 +350,10 @@ class SeismicArray(object):
     def aperture(self):
         """
         Return the array aperture in kilometers.
-
         The array aperture is the maximum distance between any two stations in
         the array.
+
+        :return Array aperture in kilometers.
         """
         distances = []
         geo = self.geometry
@@ -390,7 +389,8 @@ class SeismicArray(object):
 
     def _coordinate_values(self):
         """
-        Return the array geometry as simple lists of lat, long and elevation.
+        Return the array geometry as simple lists of latitude, longitude and
+        elevation.
         """
         geo = self.geometry
         lats, lngs, hgt = [], [], []
@@ -420,6 +420,7 @@ class SeismicArray(object):
         :param latitude: Latitude of reference origin.
         :param longitude: Longitude of reference origin.
         :param absolute_height_in_km: Elevation of reference origin.
+        :type correct_3dplane: bool
         :param correct_3dplane: Correct the returned geometry by a
             best-fitting 3D plane.
             This might be important if the array is located on an inclined
@@ -458,10 +459,15 @@ class SeismicArray(object):
         :param vel_cor: correction velocity (upper layer) in km/s. May be given
             at each station as a dictionary with the station/channel IDs as
             keys (same as in self.geometry).
+        :type static3d: bool
         :param static3d: a correction of the station height is applied using
             vel_cor the correction is done according to the formula:
             t = rxy*s - rz*cos(inc)/vel_cor
-            where inc is defined by inv = asin(vel_cor*slow)
+            where inc is defined by inc = asin(vel_cor*slow)
+        :return Dictionary with time differences relative to reference point.
+            The station names are given in the keys and a lost of time
+            differences for each slowness step is given in the items.
+            The none key contains the absolute slowness value for each step.
         """
         geom = self._get_geometry_xyz(latitude, longitude,
                                       absolute_height_in_km)
@@ -509,10 +515,15 @@ class SeismicArray(object):
         :param longitude: longitude of reference origin
         :param absolute_height: elevation of reference origin, in km
         :param vel_cor: correction velocity (upper layer) in km/s
+        :type static3d: bool
         :param static3d: a correction of the station height is applied using
             vel_cor the correction is done according to the formula:
             t = rxy*s - rz*cos(inc)/vel_cor
-            where inc is defined by inv = asin(vel_cor*slow)
+            where inc is defined by inc = asin(vel_cor*slow)
+
+        :return 2D Timeshift table for each station in the array. Each table
+                gives the timeshift for all slowness_x and slowness_y
+                combinations.
         """
         if any([_i is None for _i in [latitude, longitude, absolute_height]]):
             latitude = self.geometrical_center["latitude"]
@@ -589,7 +600,7 @@ class SeismicArray(object):
         :param static3d: a correction of the station height is applied using
             vel_cor the correction is done according to the formula:
             t = rxy*s - rz*cos(inc)/vel_cor
-            where inc is defined by inv = asin(vel_cor*slow)
+            where inc is defined by inc = asin(vel_cor*slow)
         :param vel_cor: float or dict
         :param vel_cor: correction velocity (upper layer) in km/s. May be given
             at each station as a dictionary with the station/channel IDs as
@@ -713,7 +724,7 @@ class SeismicArray(object):
         Wrapper for the Function
         :class:`~obspy.signal.array_analysis.array_rotation_strain.array_rotation_strain`.
         Returns rotations and strains calculations from array measurements in a
-        structured way and prepossesses the input.
+        structured way and pre-processes the input.
         :param stream: Stream containing all traces of the array.
         :type stream: :class:`~obspy.core.stream.Stream`.
         :param vp: P wave speed in the soil under the array (km/s).
@@ -1367,7 +1378,7 @@ class SeismicArray(object):
         :param static3d: a correction of the station height is applied using
             vel_cor the correction is done according to the formula:
             t = rxy*s - rz*cos(inc)/vel_cor
-            where inc is defined by inv = asin(vel_cor*slow)
+            where inc is defined by inc = asin(vel_cor*slow)
         :type store: function
         :param store: A custom function which gets called on each iteration.
             It is called with the relative power map and the time offset as
