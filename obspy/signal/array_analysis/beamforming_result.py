@@ -366,30 +366,63 @@ class BeamformerResult(object):
         num_net = len(inventory_contents['networks'])
         num_sta = len(inventory_contents['stations'])
         num_cha = len(inventory_contents['channels'])
-        ret_str += "\tBased on Inventory with %i Network(s), %i Stations and %i Channels.\n" \
+        ret_str += "\tBased on Inventory with %i Network(s), %i Stations and" \
+                   " %i Channels.\n" \
                    % (num_net, num_sta,num_cha)
 
         ret_str += "\tInput parameters: \n"
-        ret_str += "\t\t Slowness Range:                     " + str(self.slowness_range[0]) + \
-                   " - " + str(self.slowness_range[-1]) + "\n"
-        ret_str += "\t\t Start Time:                         " + str(UTCDateTime(self.win_starttimes[0])) + "\n"
-        ret_str += "\t\t Number of Windows:                  " + str(len(self.win_starttimes)) + "\n"
-        ret_str += "\t\t Distance between Window-Starttimes: " + str(self.win_starttimes[1] - self.win_starttimes[0])
+        ret_str += "\t\t Slowness Range:                     " \
+                   + str(self.slowness_range[0]) + \
+                   " to " + str(self.slowness_range[-1]) + "\n"
+        ret_str += "\t\t Start Time:                         " \
+                   + str(UTCDateTime(self.starttime)) + "\n"
+        ret_str += "\t\t End Time:                           " \
+                   + str(UTCDateTime(self.endtime)) + "\n"
+        ret_str += "\t\t Number of Windows:                  " \
+                   + str(len(self.win_starttimes)) + "\n"
+        try:
+            ret_str += "\t\t Distance between Window-Starttimes: " \
+                       + str(self.win_starttimes[1] - self.win_starttimes[0])
+        except IndexError:
+            pass
         ret_str += "\n\n"
         ret_str += "\t Results: \n"
-        ret_str += "\t\t" + '{:>9}'.format('#Window|') + '{:>9}'.format('Baz|') + '{:>9}'.format('Slowness|') \
-                          + '{:>9}'.format('Max Abs P|') + '{:>9}'.format('Max Rel P') + "\n"
-        for i, (baz, slow, abs_p, rel_p) in enumerate(zip(self.max_pow_baz, self.max_pow_slow, self.max_abs_power, self.max_rel_power)):
-            ret_str += " \t\t" + '{:>8d}'.format(i) + \
-                       "|" + '{:>8.2f}'.format(baz) + \
-                       "|" + '{:>8.2f}'.format(slow) + \
-                       "|" + '{:>9.1e}'.format(abs_p) + \
-                       "|" + '{:>8.2f}'.format(rel_p) + "\n"
 
-        ret_str += "\n\t\t Full_Beamresolution: " + str(self.full_beamres)
-        ret_str += "\n\t\t Frequencies:         " + str(self.freqs)
-        ret_str += "\n\t\t Incidence:           " + str(self.incidence)
-        ret_str += "\n\t\t Timestep:            " + str(self.timestep)
+        if self.method in ['FK', 'CAPON', 'DLS', 'PWS', 'SWP']:
+
+            ret_str += "\t\t" + '{:>9}'.format('#Window|') + \
+                       '{:>9}'.format('Baz|') + '{:>9}'.format('Slowness|') \
+                       + '{:>9}'.format('Max Abs P|') + '{:>9}'.format(
+                'Max Rel P') + "\n"
+            for i, (baz, slow, abs_p, rel_p) in enumerate(
+                    zip(self.max_pow_baz, self.max_pow_slow,
+                        self.max_abs_power, self.max_rel_power)):
+                ret_str += " \t\t" + '{:>8d}'.format(i) + \
+                           "|" + '{:>8.2f}'.format(baz) + \
+                           "|" + '{:>8.2f}'.format(slow) + \
+                           "|" + '{:>9.1e}'.format(abs_p) + \
+                           "|" + '{:>8.2f}'.format(rel_p) + "\n"
+
+        else:
+            ret_str += "\t\t" + '{:>9}'.format('#Window|') + \
+                       '{:>9}'.format('Baz|') + '{:>9}'.format('Slowness|') + \
+                       '{:>9}'.format('Max Rel P') + "\n"
+            for i, (baz, slow, rel_p) in enumerate(
+                    zip(self.max_pow_baz, self.max_pow_slow,
+                        self.max_rel_power)):
+                ret_str += " \t\t" + '{:>8d}'.format(i) + \
+                           "|" + '{:>8.2f}'.format(baz) + \
+                           "|" + '{:>8.2f}'.format(slow) + \
+                           "|" + '{:>8.2f}'.format(rel_p) + "\n"
+
+            ret_str += "\n\t\t Full_Beamresolution (Shape): " \
+                       + str(np.shape(self.full_beamres))
+            ret_str += "\n\t\t Frequencies (Shape):         " \
+                       + str(np.shape(self.freqs))
+            ret_str += "\n\t\t Incidence (Shape):           " \
+                       + str(np.shape(self.incidence))
+            ret_str += "\n\t\t Timestep:                    " \
+                       + str(self.timestep)
 
         return ret_str
 
