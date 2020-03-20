@@ -258,11 +258,10 @@ class SeismicArray(object):
             plt.show()
         return fig
 
-    @property
-    def geometry(self):
+    def _get_geometry(self):
         """
-        A dictionary of latitude, longitude and absolute height [km] values
-        for each item in the array inventory.
+        Return a dictionary of latitude, longitude and absolute height
+        [km] for each component in the array inventory.
 
         For every component in the array inventory (channels if available,
         stations otherwise), a SEED ID string with the format
@@ -308,6 +307,21 @@ class SeismicArray(object):
                              float(channel.elevation - channel.depth) / 1000.0}
                         geo[item_code] = this_coordinates
         return geo
+
+    @property
+    def geometry(self):
+        """
+        A dictionary of latitude, longitude and absolute height [km] values
+        for each item in the array inventory.
+        For every component in the array inventory (channels if available,
+        stations otherwise), a SEED ID string with the format
+        'network.station.location.channel', leaving any unknown parts blank, is
+        assembled. This is one key for the returned dictionary, while the value
+        is a dictionary of the component's coordinates.
+        :return A dictionary with keys: SEED IDs and values: dictionaries of
+            'latitude', 'longitude' and 'absolute_height_in_km'.
+        """
+        return self._get_geometry()
 
     @property
     def geometrical_center(self):
