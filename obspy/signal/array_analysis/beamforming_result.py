@@ -27,8 +27,8 @@ from obspy.imaging import cm
 
 
 def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
-                         filename_patterns, baz_plot, method,array_r,
-                         st_workon, starttime, wlen, endtime):
+                        filename_patterns, baz_plot, method, array_r,
+                        st_workon, starttime, wlen, endtime):
     """
     Some plotting taken out from _array_analysis_helper. Can't do the array
     response overlay now though.
@@ -69,7 +69,7 @@ def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
 
     npts = st_workon[0].stats.npts
     df = st_workon[0].stats.sampling_rate
-    tt = np.arange(0, npts / df, 1 / df)
+    tt = np.linspace(0, npts / df, len(st_workon[0].data))
 
     # if we choose windowlen > 0. we now move through our slices
     for i in range(numslice):
@@ -92,7 +92,7 @@ def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
                 except IndexError:
                     pass
         else:
-            tt = np.arange(0, len(trace[i]) / df, 1 / df)
+            tt = np.linspace(0, len(trace[i]) / df, len(trace[i]))
             ax1.plot(tt, trace[i], 'k')
 
         ax1.yaxis.set_major_locator(MaxNLocator(3))
@@ -219,7 +219,7 @@ class BeamformerResult(object):
     four-dimensional numpy array of relative powers for every backazimuth,
     slowness, time window and discrete frequency, but no absolute powers.
     This data allows the creation of the same plots as the previous methods,
-    as the maximum powers is easily calulated from the full power array.
+    as the maximum powers is easily calculated from the full power array.
 
     .. rubric:: Concatenating results
 
@@ -355,10 +355,8 @@ class BeamformerResult(object):
 
     def __str__(self):
         """
-        , , ,
-         = None,  = None,  = None,
-         = None,  = None, freqs = None,
-        incidence = None,  = None, timestep = None"""
+        String representation of the BeamformerResults class.
+        """
 
         ret_str = "Beamforming results created with %s method.\n" % str(self.method)
 
