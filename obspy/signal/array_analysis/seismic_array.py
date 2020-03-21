@@ -449,7 +449,7 @@ class SeismicArray(object):
             geometry[key] = {
                 "x": x,
                 "y": y,
-                "z": absolute_height_in_km - value["absolute_height_in_km"]
+                "z": value["absolute_height_in_km"] - absolute_height_in_km
             }
         if correct_3dplane:
             geometry = self._correct_with_3dplane(geometry)
@@ -1080,7 +1080,7 @@ class SeismicArray(object):
          Further plotting otions are attached to the returned object.
         :rtype: :class:`~obspy.signal.array_analysis.BeamformerResult`
         """
-        return self._array_analysis_helper(stream=stream, method="Capon",
+        return self._array_analysis_helper(stream=stream, method="CAPON",
                                            frqlow=frqlow, frqhigh=frqhigh,
                                            prefilter=prefilter, plots=plots,
                                            static3d=static3d,
@@ -2403,7 +2403,9 @@ class SeismicArray(object):
                         dat = stream[i].data[spoint[i] + offset:
                                              spoint[i] + offset + nsamp]
 
-                        tap = cosine_taper(nsamp, p=0.22)
+                        # TODO: cosine_taper(len(dat), p=0.22) or
+                        #   cosine_taper(nsamp, p=0.22)[0:len(dat)]
+                        tap = cosine_taper(len(dat), p=0.22)
                         dat = (dat - dat.mean()) * tap
                         spec[i, :] = np.fft.rfft(dat, nfft)[int(nlow): int(nlow + nf)]
                 except IndexError:
@@ -2603,27 +2605,25 @@ class SeismicArray(object):
         else:
             raise KeyError("Geometry dictionary does not have correct keys.")
         orig_geometry = geometry.copy()
-        geometry = self._geometry_dict_to_array(geometry)
-        a = geometry
-        u, s, vh = np.linalg.linalg.svd(a)
-        v = vh.conj().transpose()
+        geo_a = self._geometry_dict_to_array(geometry)
+        # compute barycenter of stations
+        center = geo_a.sum(axis=0) / geo_a.shape[0]
+        # compute basis (vh[0], vh[1]) and normal vector of the best fitting plane (vh[2])
+        # the plane minimizes the squared distance of the points to the plane
+        # taken from: "https://stackoverflow.com/questions/35070178/fit-plane-to-a-set-of-points-in-3d-scipy-
+        # optimize-minimize-vs-scipy-linalg-lsts"
+        u, s, vh = np.linalg.linalg.svd(geo_a-center)
         # satisfies the plane equation a*x + b*y + c*z = 0
         result = np.zeros((len(geometry), 3))
         # now we are seeking the station positions on that plane
         # geometry[:,2] += v[2,-1]
-        n = v[:, -1]
-        result[:, 0] = (geometry[:, 0] - n[0] * (
-                n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
-                geometry[:, 2]) /
+        n = vh[2, :]
+        result[:, 0] = (geo_a[:, 0] - n[0] * (n[0] * geo_a[:, 0] + geo_a[:, 1] * n[1] + n[2] * geo_a[:, 2]) /
                         (n[0] * n[0] + n[1] * n[1] + n[2] * n[2])**0.5)
-        result[:, 1] = (geometry[:, 1] - n[1] * (
-                n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
-                geometry[:, 2]) /
+        result[:, 1] = (geo_a[:, 1] - n[1] * (n[0] * geo_a[:, 0] + geo_a[:, 1] * n[1] + n[2] * geo_a[:, 2]) /
                         (n[0] * n[0] + n[1] * n[1] + n[2] * n[2])**0.5)
-        result[:, 2] = (geometry[:, 2] - n[2] * (
-                n[0] * geometry[:, 0] + geometry[:, 1] * n[1] + n[2] *
-                geometry[:, 2]) /
-                        (n[0] * n[0] + n[1] * n[1] + n[2] * n[2])**0.5)
+        result[:, 2] = (geo_a[:, 2] - n[2] * (n[0] * geo_a[:, 0] + geo_a[:, 1] * n[1] + n[2] * geo_a[:, 2]) /
+                        (n[0] * n[0] + n[1] * n[1] + n[2] * n[2])**0.5) + center[2]
         geometry = result[:]
         # print("Best fitting plane-coordinates :\n", geometry)
 
@@ -2646,26 +2646,37 @@ class SeismicArray(object):
         Plots distance dependent seismogramm sections.
         :param stream: Waveforms for the array processing.
         :type stream: :class:`obspy.core.stream.Stream`
-        :param event: earthquake position (lat/lon/depth) to which distance is
-            calculated
-        :type event:
+        :param event: Earthquake position defined either by Obspy Event or
+                      Obspy Origin class.
+        :type event: :class:`~obspy.core.event.event.Event` or
+            :class:`~obspy.core.event.origin.Origin`
         :param starttime: starttime of traces to be plotted
         :type starttime: UTCDateTime
         :param endtime: endtime of traces to be plotted
         :type endtime: UTCDateTime
-        :param plot_travel_times: flag weather phases are marked as traveltime
-            plots in the section obspy.taup is used to calculate the phases
+        :param plot_travel_times: Flag weather phases are marked as traveltime
+            plots in the section. obspy.taup is used to calculate the phases.
         :type: bool
+        :param vel_model: 1D velocity model used for calculation of the
+                          theoretical phase arrivals. A list of possible models
+                          can be found here:
+                          docs.obspy.org/packages/obspy.taup.html
+        :type vel_model: str
         """
         model = TauPyModel(model=vel_model)
         stream = stream.slice(starttime=starttime, endtime=endtime).copy()
-        event_depth_in_km = event.origins[0].depth / 1000.0
-        event_time = event.origins[0].time
 
         if isinstance(event, Event):
             origin_ = event.origins[0]
         elif isinstance(event, Origin):
             origin_ = event
+        else:
+            raise TypeError("Only Obspy Events or Obspy Origins are supported"
+                            " as event")
+
+        event_depth_in_km = origin_.depth / 1000.0
+        event_time = origin_.time
+
         self._attach_coords_to_stream(stream, origin_)
 
         cmap = plt.cm.get_cmap('jet')
