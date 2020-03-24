@@ -665,7 +665,35 @@ class SeismicArrayTestCase(unittest.TestCase):
         np.testing.assert_array_equal(array_latlon, ref_array)
         np.testing.assert_array_equal(array_xyz, ref_array)
 
-    # def test_plot_radial_transfer_function(self):
+    def test_array_plotting(self):
+        arr = SeismicArray('pfield', inventory=read_inventory(
+            os.path.join(self.path, 'pfield_inv_for_instaseis.xml')))
+        with ImageComparison(self.path_images, "seismic_array_map.png") as ic:
+            arr.plot()
+            plt.savefig(ic.name)
+
+    def test_plot_radial_transfer_function(self):
+        arr = SeismicArray('pfield', inventory=read_inventory(
+            os.path.join(self.path, 'pfield_inv_for_instaseis.xml')))
+        with ImageComparison(self.path_images, "radialtransferfunc.png") as ic:
+            arr.plot_radial_transfer_function(0, 0.6, 0.05, [0.2])
+            plt.savefig(ic.name)
+
+    def test_plot_transfer_function_wavenumber(self):
+        arr = SeismicArray('pfield', inventory=read_inventory(
+            os.path.join(self.path, 'pfield_inv_for_instaseis.xml')))
+        with ImageComparison(self.path_images, "transfer_func_k.png") as ic:
+            arr.plot_transfer_function_wavenumber(10, 0.1)
+            plt.savefig(ic.name)
+
+    def test_plot_transfer_function_freqslowness(self):
+        arr = SeismicArray('pfield', inventory=read_inventory(
+            os.path.join(self.path, 'pfield_inv_for_instaseis.xml')))
+        with ImageComparison(self.path_images, "transfer_func_fs.png") as ic:
+            arr.plot_transfer_function_freqslowness(slim=10, sstep=0.5,
+                                                    freq_min=0.1, freq_max=4,
+                                                    freq_step=0.2)
+            plt.savefig(ic.name)
     #     """
     #     Tests the plotting of radial array transfer functions.
     #     """
