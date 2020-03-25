@@ -14,15 +14,15 @@ import warnings
 
 import numpy as np
 from scipy import interpolate
+import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.ticker import MaxNLocator, MultipleLocator
 
 from obspy.core import UTCDateTime
-from obspy.geodetics import degrees2kilometers
 from obspy.imaging import cm
 
 
-def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
+def plot_array_analysis(out, transff, sllx, slmx, slly, slmy, sls,
                         filename_patterns, baz_plot, method, array_r,
                         st_workon, starttime, wlen, endtime):
     """
@@ -31,7 +31,7 @@ def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
     :param baz_plot: Whether to show backazimuth-slowness map (True) or
      slowness x-y map (False).
     """
-    import matplotlib.pyplot as plt
+
     trace = []
     t, rel_power, abs_power, baz, slow = out.T
     baz[baz < 0.0] += 360
@@ -43,7 +43,7 @@ def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
 
     slx = np.arange(sllx - sls, slmx, sls)
     sly = np.arange(slly - sls, slmy, sls)
-    sll = np.min(np.absolute([sllx,slly,slmx,slmy]))
+    sll = np.min(np.absolute([sllx, slly, slmx, slmy]))
     slll = np.arange(-sll - sls, sll, sls)
     if baz_plot:
         maxslowg = np.sqrt(2*sll**2)
@@ -93,11 +93,10 @@ def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
 
         ax1.yaxis.set_major_locator(MaxNLocator(3))
 
-
         # if we have chosen the baz_plot option a re-griding
         # of the sx,sy slowness map is needed
         if baz_plot:
-            ax = fig.add_axes([0.10, 0.1, 0.70, 0.7],polar=True)
+            ax = fig.add_axes([0.10, 0.1, 0.70, 0.7], polar=True)
             ax.set_theta_direction(-1)
             ax.set_theta_zero_location("N")
             slowgrid = []
@@ -110,56 +109,56 @@ def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
                         bbaz -= 360.
                     if bbaz < 0.:
                         bbaz += 360.
-                    slowgrid.append((bbaz,np.sqrt(sx * sx + sy * sy),power[ix, iy]))
+                    slowgrid.append((bbaz, np.sqrt(sx * sx + sy * sy),
+                                     power[ix, iy]))
             if array_r:
                 for ix, sx in enumerate(slll):
                     for iy, sy in enumerate(slll):
-                        slow_y = np.cos((baz[i] + 180.) * np.pi / 180.) * slow[i]
-                        slow_x = np.sin((baz[i] + 180.) * np.pi / 180.) * slow[i]
+                        slow_y = np.cos((baz[i] + 180) * np.pi / 180) * slow[i]
+                        slow_x = np.sin((baz[i] + 180) * np.pi / 180) * slow[i]
                         tslow = (np.sqrt((sx+slow_x) *
-                                    (sx+slow_x)+(sy+slow_y) *
-                                    (sy+slow_y)))
+                                 (sx+slow_x)+(sy+slow_y) *
+                                 (sy+slow_y)))
                         tbaz = (np.arctan2(sx+slow_x, sy+slow_y) *
-                                    180 / np.pi + 180.)
+                                180 / np.pi + 180.)
                         if tbaz > 360.:
                             tbaz -= 360
                         if tbaz < 0:
                             tbaz += 360.
-                        transgrid.append((tbaz,tslow, transff[ix, iy]))
-
+                        transgrid.append((tbaz, tslow, transff[ix, iy]))
 
             slowgrid = np.asarray(slowgrid)
             sl = slowgrid[:, 1]
             bz = slowgrid[:, 0]
             slowg = slowgrid[:, 2]
-            grid = interpolate.griddata((bz, sl), slowg,
+            grid = interpolate.griddata(np.array(bz, sl), slowg,
                                         (grid_x, grid_y),
                                         method='nearest')
             ax.pcolormesh(np.radians(xi), yi, grid, cmap=cmap)
-            #ax.contourf(np.radians(xi), yi, grid, cmap=cmap)
+            # ax.contourf(np.radians(xi), yi, grid, cmap=cmap)
             if array_r:
                 level = np.arange(0.1, 0.7, 0.1)
                 transgrid = np.asarray(transgrid)
                 tsl = transgrid[:, 1]
                 tbz = transgrid[:, 0]
                 transg = transgrid[:, 2]
-                trans = interpolate.griddata((tbz, tsl), transg,
-                                     (grid_x, grid_y),
-                                     method='nearest')
-                ax.contour(np.radians(xi), yi, trans, levels=level, colors='w',alpha=0.5)
-
+                trans = interpolate.griddata(np.array(tbz, tsl), transg,
+                                             (grid_x, grid_y),
+                                             method='nearest')
+                ax.contour(np.radians(xi), yi, trans, levels=level, colors='w',
+                           alpha=0.5)
 
             ax.set_xticks([0., np.pi/2., np.pi, 3./2.*np.pi])
             ax.grid(color='w')
             ax.set_xticklabels(['N', 'E', 'S', 'W'])
-            #ax.set_xlim(0,360)
+            # ax.set_xlim(0,360)
             # ax.set_ylim(yi[0], yi[-1])
             ax.set_ylim(0, maxslowg)
         else:
             ax = fig.add_axes([0.10, 0.1, 0.70, 0.7])
             ax.set_xlabel('slowness [s/deg]')
             ax.set_ylabel('slowness [s/deg]')
-            #this is to plot the vector from 0,0 to maximum
+            # this is to plot the vector from 0,0 to maximum
             slow_y = np.cos((baz[i] + 180.) * np.pi / 180.) * slow[i]
             slow_x = np.sin((baz[i] + 180.) * np.pi / 180.) * slow[i]
             ax.pcolormesh(slx, sly, powmap[i].T)
@@ -167,8 +166,9 @@ def plot_array_analysis(out, transff,sllx, slmx, slly, slmy, sls,
                      head_length=0.01, fc='k', ec='k')
             if array_r:
                 try:
-                    level = np.arange(0.1, 0.6, 0.1)
-                    ax.contour(slll+slow_x, slll+slow_y, transff.T,10, colors='w',alpha=0.5)
+                    # level = np.arange(0.1, 0.6, 0.1)
+                    ax.contour(slll+slow_x, slll+slow_y, transff.T,
+                               10, colors='w', alpha=0.5)
                 except:
                     pass
 
@@ -354,7 +354,8 @@ class BeamformerResult(object):
         String representation of the BeamformerResults class.
         """
 
-        ret_str = "Beamforming results created with %s method.\n" % str(self.method)
+        ret_str = "Beamforming results created with %s method.\n"\
+                  % str(self.method)
 
         inventory_contents = self.inventory.get_contents()
         num_net = len(inventory_contents['networks'])
@@ -362,7 +363,7 @@ class BeamformerResult(object):
         num_cha = len(inventory_contents['channels'])
         ret_str += "\tBased on Inventory with %i Network(s), %i Stations and" \
                    " %i Channels.\n" \
-                   % (num_net, num_sta,num_cha)
+                   % (num_net, num_sta, num_cha)
 
         ret_str += "\tInput parameters: \n"
         ret_str += "\t\t Slowness Range:                     " \
@@ -471,7 +472,6 @@ class BeamformerResult(object):
         """
         from matplotlib.colorbar import ColorbarBase
         from matplotlib.colors import Normalize
-        import matplotlib.pyplot as plt
         cmap = cm.get_cmap('viridis')
         # Can't plot negative slownesses:
         sll = abs(self.slowness_range).min()
@@ -532,7 +532,6 @@ class BeamformerResult(object):
 
         :param show: Whether to call plt.show() immediately.
         """
-        import matplotlib.pyplot as plt
         labels = ['Rel. Power', 'Abs. Power', 'Backazimuth', 'Slowness']
         datas = [self.max_rel_power, self.max_abs_power,
                  self.max_pow_baz, self.max_pow_slow]
@@ -582,11 +581,10 @@ class BeamformerResult(object):
 
         Requires full 4D results, at the moment only provided by
         :meth:`three_component_beamforming`.
-        :param plot_frequencies: Discrete frequencies for which windows
+        :param plot_frequency: Discrete frequencies for which windows
          should be plotted, otherwise an average of frequencies is plotted.
         :param show: Whether to call plt.show() immediately.
         """
-        import matplotlib.pyplot as plt
         if self.full_beamres is None:
             raise ValueError('Insufficient data. Try other plotting options.')
         if plot_frequency is not None:
@@ -659,7 +657,6 @@ class BeamformerResult(object):
          frequencies is plotted (ignored if average_freqs is True).
         :param show: Whether to call plt.show() immediately.
         """
-        import matplotlib.pyplot as plt
         if self.full_beamres is None:
             raise ValueError('Insufficient data for this plotting method.')
         if average_freqs is True and plot_frequencies is not None:

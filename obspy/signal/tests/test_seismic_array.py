@@ -25,8 +25,10 @@ from obspy.core.inventory.channel import Channel
 from obspy.core.inventory.station import Station
 from obspy.core.inventory.network import Network
 from obspy.core.inventory.inventory import Inventory
+from obspy.core.event.event import Event
 
 KM_PER_DEG = 111.1949
+
 
 class SeismicArrayTestCase(unittest.TestCase):
     """
@@ -46,8 +48,8 @@ class SeismicArrayTestCase(unittest.TestCase):
             if sys == 'xy':
                 coords_lonlat = [list(util_lon_lat(0, 0, stn[0], stn[1]))
                                  for stn in coords]
-                for i, cor in enumerate(coords_lonlat):
-                    cor.append(coords[i][2])
+                for _i, _cor in enumerate(coords_lonlat):
+                    _cor.append(coords[_i][2])
             else:
                 coords_lonlat = coords
 
@@ -125,16 +127,16 @@ class SeismicArrayTestCase(unittest.TestCase):
 
         rotnet = Network('N', stations=stations)
         rotinv = Inventory(networks=[rotnet])
-        self.rotatation_array = SeismicArray(name='Rot_Array', inventory=rotinv)
+        self.rotatation_array = SeismicArray(name='RotArray', inventory=rotinv)
 
         # array_coords_km is needed to compute the test results, array_coords
         # is used as input for the derive_rotation_from_array method
         self.rotatation_array_coords_km = \
             self.rotatation_array._geometry_dict_to_array(
-            self.rotatation_array._get_geometry_xyz(0, 0, 0))[::3]
+                self.rotatation_array._get_geometry_xyz(0, 0, 0))[::3]
         self.rotatation_array_coords = \
             self.rotatation_array._geometry_dict_to_array(
-            self.rotatation_array.geometry)[::3]
+                self.rotatation_array.geometry)[::3]
 
         ts1 = np.empty((1000, 7))
         ts2 = np.empty((1000, 7))
@@ -178,15 +180,15 @@ class SeismicArrayTestCase(unittest.TestCase):
         Test _get_geometry_xyz and, implicitly, _get_geometry (necessary because
         self.geometry is a property and can't be set).
         """
-        geox_exp = {'testnetwork.0..': {'x': -111.31564682647114,
-                                        'y': -110.5751633754653, 'z': 0.0},
-                    'testnetwork.1..': {'x': 111.31564682647114,
-                                        'y': -110.5751633754653, 'z': 0.0},
-                    'testnetwork.2..': {'x': 0.0, 'y': 0.0, 'z': 0.0},
-                    'testnetwork.3..': {'x': -111.28219117308639, 'y':
-                                        110.5751633754653, 'z': 0.0},
-                    'testnetwork.4..': {'x': 111.28219117308639, 'y':
-                                        110.5751633754653, 'z': 0.0}}
+        geox_exp = {'t_net.0..': {'x': -111.31564682647114,
+                                  'y': -110.5751633754653, 'z': 0.0},
+                    't_net.1..': {'x': 111.31564682647114,
+                                  'y': -110.5751633754653, 'z': 0.0},
+                    't_net.2..': {'x': 0.0, 'y': 0.0, 'z': 0.0},
+                    't_net.3..': {'x': -111.28219117308639,
+                                  'y': 110.5751633754653, 'z': 0.0},
+                    't_net.4..': {'x': 111.28219117308639,
+                                  'y': 110.5751633754653, 'z': 0.0}}
         geoxno3d = self.geometry_array._get_geometry_xyz(1, 1, 0,
                                                          correct_3dplane=False)
         geox = self.geometry_array._get_geometry_xyz(1, 1, 0,
@@ -229,52 +231,46 @@ class SeismicArrayTestCase(unittest.TestCase):
     def test__get_timeshift_baz(self):
         # test 2D calculation
         ref_table_2d = {None: np.array([-2, -1,  0,  1,  2]),
-                        'testnetwork.0..':
-                            np.array([-2.82208081, -1.4110404,
-                                      -0., 1.4110404, 2.82208081]),
-                        'testnetwork.1..':
-                            np.array([0.00941771, 0.00470886,
-                                      0., -0.00470886, -0.00941771]),
-                        'testnetwork.2..': np.array([0.,  0.,  0., -0., -0.]),
-                        'testnetwork.3..':
-                            np.array([-0.00899221, -0.00449611,
-                                      -0., 0.00449611, 0.00899221]),
-                        'testnetwork.4..':
-                            np.array([2.82165531, 1.41082765,
-                                      0., -1.41082765, -2.82165531])}
+                        't_net.0..': np.array([-2.82208081, -1.4110404, -0.,
+                                               1.4110404, 2.82208081]),
+                        't_net.1..': np.array([0.00941771, 0.00470886, 0.,
+                                               -0.00470886, -0.00941771]),
+                        't_net.2..': np.array([0.,  0.,  0., -0., -0.]),
+                        't_net.3..': np.array([-0.00899221, -0.00449611, -0.,
+                                               0.00449611, 0.00899221]),
+                        't_net.4..': np.array([2.82165531, 1.41082765, 0.,
+                                               -1.41082765, -2.82165531])}
 
-        tshft_table_2d = self.geometry_array._get_timeshift_baz(-2, 2, 1, 45,
-                                                     latitude=1.0,
-                                                     longitude=1.0,
-                                                     absolute_height_in_km=0.0,
-                                                     static3d=False,
-                                                     vel_cor=4.0)
+        tshft_table_2d = \
+            self.geometry_array._get_timeshift_baz(-2, 2, 1, 45,
+                                                   latitude=1.0,
+                                                   longitude=1.0,
+                                                   absolute_height_in_km=0.0,
+                                                   static3d=False,
+                                                   vel_cor=4.0)
 
         for key, value in list(tshft_table_2d.items()):
             self.assertTrue(np.allclose(value, ref_table_2d[key]))
 
-        # test 2D calculation
+        # test 3D calculation
         ref_table_3d = {None: np.array([-2, -1, 0, 1, 2]),
-                        'testnetwork.0..':
-                            np.array([-2.69740474, -1.28612131, 0.125,
-                                      1.5359595, 2.94675688]),
-                        'testnetwork.1..':
-                            np.array([-0.11525835, -0.12021024, -0.125,
-                                      -0.12962795, -0.13409378]),
-                        'testnetwork.2..':
-                            np.array([0.,  0.,  0.,  0.,  0.]),
-                        'testnetwork.3..':
-                            np.array([0.11568385, 0.12042299, 0.125,
-                                      0.1294152, 0.13366828]),
-                        'testnetwork.4..':
-                            np.array([2.69697924, 1.28590856, -0.125,
-                                      -1.53574675, -2.94633138])}
-        tshft_table_3d = self.array_3d._get_timeshift_baz(-2, 2, 1, 45,
-                                                          latitude=1.0,
-                                                          longitude=1.0,
-                                                          absolute_height_in_km=0.5,
-                                                          static3d=True,
-                                                          vel_cor=4.0)
+                        't_net.0..': np.array([-2.94675688, -1.5359595, -0.125,
+                                              1.28612131, 2.69740474]),
+                        't_net.1..': np.array([0.13409378, 0.12962795, 0.125,
+                                              0.12021024, 0.11525835]),
+                        't_net.2..': np.array([0., 0., 0., 0., 0.]),
+                        't_net.3..': np.array([-0.13366828, -0.1294152, -0.125,
+                                              -0.12042299, -0.11568385]),
+                        't_net.4..': np.array([2.94633138, 1.53574675, 0.125,
+                                              -1.28590856, -2.69697924])}
+
+        tshft_table_3d = \
+            self.array_3d._get_timeshift_baz(-2, 2, 1, 45,
+                                             latitude=1.0,
+                                             longitude=1.0,
+                                             absolute_height_in_km=0.5,
+                                             static3d=True,
+                                             vel_cor=4.0)
         for key, value in list(tshft_table_3d.items()):
             self.assertTrue(np.allclose(value, ref_table_3d[key]))
 
@@ -295,9 +291,6 @@ class SeismicArrayTestCase(unittest.TestCase):
                          [2.9959967, 3.9904232, 4.98485],
                          [3.9967816, 4.991208, 5.985635]]]
         tshft_table_2d = self.geometry_array._get_timeshift(1, 1, 1, 3, 3,
-                                                            latitude=None,
-                                                            longitude=None,
-                                                            absolute_height=None,
                                                             vel_cor=4.,
                                                             static3d=False)
         self.assertTrue(np.allclose(ref_table_2d, tshft_table_2d))
@@ -318,9 +311,6 @@ class SeismicArrayTestCase(unittest.TestCase):
                          [2.8714018,  3.866072,  4.8609056],
                          [3.8725932,  4.8672643,  5.862099 ]]]
         tshft_table_3d = self.array_3d._get_timeshift(1, 1, 1, 3, 3,
-                                                      latitude=None,
-                                                      longitude=None,
-                                                      absolute_height=None,
                                                       vel_cor=4.,
                                                       static3d=True)
         self.assertTrue(np.allclose(ref_table_3d, tshft_table_3d))
@@ -465,8 +455,8 @@ class SeismicArrayTestCase(unittest.TestCase):
         self.assertTrue(np.allclose([8, 5, 7], epoint))
 
     def test_fk_array_transff_freqslowness(self):
-        transff = self.transff_array.array_transfer_function_freqslowness(40, 20, 1,
-                                                                          10, 1)
+        transff = self.transff_array.\
+            array_transfer_function_freqslowness(40, 20, 1, 10, 1)
         # had to be changed because the x-y to lat lon conversion is different
         # in the older test_sonic file which includes the test for the
         # old array methods

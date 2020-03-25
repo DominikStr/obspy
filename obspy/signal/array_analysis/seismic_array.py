@@ -28,9 +28,7 @@ from obspy.core.event.event import Event
 from obspy.core.event.origin import Origin
 from obspy.core.inventory import Inventory
 from obspy.core.util import AttribDict
-from obspy.geodetics import gps2dist_azimuth, degrees2kilometers, \
-    locations2degrees
-from obspy.imaging import cm
+from obspy.geodetics import gps2dist_azimuth, locations2degrees
 from obspy.imaging.cm import obspy_sequential
 from obspy.signal.headers import clibsignal
 from obspy.signal.invsim import cosine_taper
@@ -173,9 +171,10 @@ class SeismicArray(object):
                         continue
                         # Also remove if it doesn't cover the time of the
                         # trace:
-                    for tr in stream.select(network=netw.code, station=stn.code,
-                                        location=cha.location_code,
-                                        channel=cha.code):
+                    for tr in stream.select(network=netw.code,
+                                            station=stn.code,
+                                            location=cha.location_code,
+                                            channel=cha.code):
                         if not cha.is_active(starttime=tr.stats.starttime,
                                              endtime=tr.stats.endtime):
                             del stn.channels[i]
@@ -551,10 +550,10 @@ class SeismicArray(object):
             nstat = len(geometry)
             time_shift_tbl = np.empty((nstat, grdpts_x, grdpts_y),
                                       dtype="float32")
-            for k in range(grdpts_x):
-                sx = (sllx + k * sls) / KM_PER_DEG
-                for l in range(grdpts_y):
-                    sy = (slly + l * sls) / KM_PER_DEG
+            for i in range(grdpts_x):
+                sx = (sllx + i * sls) / KM_PER_DEG
+                for j in range(grdpts_y):
+                    sy = (slly + j * sls) / KM_PER_DEG
                     slow = np.sqrt(sx * sx + sy * sy)
                     if vel_cor * slow <= 1.:
                         inc = np.arcsin(vel_cor * slow)
@@ -563,7 +562,7 @@ class SeismicArray(object):
                             "Correction velocity smaller than apparent"
                             " velocity")
                         inc = np.pi / 2.
-                    time_shift_tbl[:, k, l] = sx * geometry[:, 0] + sy * \
+                    time_shift_tbl[:, i, j] = sx * geometry[:, 0] + sy * \
                         geometry[:, 1] + geometry[:, 2] * np.cos(inc) / vel_cor
             return time_shift_tbl
         # optimized version
@@ -580,7 +579,7 @@ class SeismicArray(object):
     def vespagram(self, stream, event_or_baz, sll, slm, sls, starttime,
                   endtime, reference='center_of_gravity', method="DLS",
                   nthroot=1, static3d=False, vel_cor=4.0, wiggle_scale=1.0,
-                  align=False, align_phase=('P', 'Pdiff'),
+                  align=False, align_phase='P',
                   density_cmap=obspy_sequential, plot="wiggle", show=True):
         """
         :param stream: Stream containing all traces of the array.
@@ -719,8 +718,8 @@ class SeismicArray(object):
                           slownesses[-1] + sls * 0.5)
 
                 col = ax.imshow(np.flipud(beams), cmap=density_cmap,
-                          interpolation="nearest", extent=extent,
-                          aspect='auto')
+                                interpolation="nearest", extent=extent,
+                                aspect='auto')
                 plt.colorbar(col)
 
             ax.set_ylabel('slowness [s/deg]')
@@ -821,13 +820,13 @@ class SeismicArray(object):
             for _j, trace in enumerate(comp):
                 tr[_i][:, _j][:] = np.require(trace.data, np.float64)
 
-        sp = array_rotation_strain(subarray, tr[0], tr[1], tr[2], vp=vp,
-                                   vs=vs, array_coords=array_coords,
-                                   sigmau=sigmau)
+        rot = array_rotation_strain(subarray, tr[0], tr[1], tr[2], vp=vp,
+                                    vs=vs, array_coords=array_coords,
+                                    sigmau=sigmau)
 
-        d1 = sp.pop("ts_w1")
-        d2 = sp.pop("ts_w2")
-        d3 = sp.pop("ts_w3")
+        d1 = rot.pop("ts_w1")
+        d2 = rot.pop("ts_w2")
+        d3 = rot.pop("ts_w3")
 
         header = {"network": "XX", "station": "YY", "location": "99",
                   "starttime": list(components.values())[0][0].stats.starttime,
@@ -844,7 +843,7 @@ class SeismicArray(object):
         header["npts"] = len(d3)
         tr3 = Trace(data=d3, header=copy.copy(header))
 
-        return Stream(traces=[tr1, tr2, tr3]), sp
+        return Stream(traces=[tr1, tr2, tr3]), rot
 
     def slowness_whitened_power(self, stream, frqlow, frqhigh,
                                 prefilter=True, plots=(),
@@ -1040,10 +1039,10 @@ class SeismicArray(object):
                                            slx=slx, sly=sly, sls=sls)
 
     def capon_estimator(self, stream, frqlow, frqhigh,
-                    prefilter=True, plots=(), static3d=False,
-                    array_response=False,
-                    vel_corr=4.8, wlen=-1, wfrac=0.8,
-                    slx=(-10, 10), sly=(-10, 10), sls=0.5):
+                        prefilter=True, plots=(), static3d=False,
+                        array_response=False,
+                        vel_corr=4.8, wlen=-1, wfrac=0.8,
+                        slx=(-10, 10), sly=(-10, 10), sls=0.5):
         """
         Capon's high resolution estimator.
 
@@ -1651,13 +1650,13 @@ class SeismicArray(object):
                     # All data, tapered.
                     alldata_z[n, i, :] = _alldata_z[n, i * nstep:
                                                     i * nstep + nsamp] * \
-                                         cosine_taper(nsamp)
+                        cosine_taper(nsamp)
                     alldata_n[n, i, :] = _alldata_n[n, i * nstep:
                                                     i * nstep + nsamp] * \
-                                         cosine_taper(nsamp)
+                        cosine_taper(nsamp)
                     alldata_e[n, i, :] = _alldata_e[n, i * nstep:
                                                     i * nstep + nsamp] * \
-                                         cosine_taper(nsamp)
+                        cosine_taper(nsamp)
                     nst[i] += 1
 
         # Need an array of the starting times of the beamforming windows for
@@ -1700,8 +1699,8 @@ class SeismicArray(object):
         if whiten:
             try:
                 float(whiten)
-            except:
-                msg = ('Whiten parameter must be digits. It was set to 0.01.')
+            except ValueError or TypeError:
+                msg = 'Whiten parameter must be digits. It was set to 0.01.'
                 warnings.warn(msg)
                 whiten = 0.01
             if whiten >= fr[-1] - fr[0]:
@@ -1859,7 +1858,7 @@ class SeismicArray(object):
                                                res.shape)
                     beamres[:, :, int(win / win_average), f] = res[:, :, k]
                     incidence[int(win / win_average), f] = incs[k] * 180. / \
-                                                           math.pi
+                        math.pi
 
         return beamres, fr, incidence, window_start_times
 
@@ -2016,7 +2015,6 @@ class SeismicArray(object):
         """
         Plot array transfer function radially, as function of slowness.
         """
-        import matplotlib.pyplot as plt
         u = np.arange(smin, smax, sstep)
         theo_backazi = np.arange(0, 362, 2) * math.pi / 180.
         theo_backazi = theo_backazi.reshape((theo_backazi.size, 1))
@@ -2067,7 +2065,6 @@ class SeismicArray(object):
          x and y directions).
         :param kstep: Step in wavenumber.
         """
-        import matplotlib.pyplot as plt
         transff = self.array_transfer_function_wavenumber(klim, kstep)
         self._plot_transfer_function_helper(transff, klim, kstep)
         plt.xlabel('Wavenumber West-East')
@@ -2086,7 +2083,6 @@ class SeismicArray(object):
         :param freq_max: Maximum frequency in signal.
         :param freq_step: Frequency sample distance
         """
-        import matplotlib.pyplot as plt
         transff = self.array_transfer_function_freqslowness(
             slim, sstep, freq_min, freq_max, freq_step)
         self._plot_transfer_function_helper(transff, slim, sstep)
@@ -2103,7 +2099,6 @@ class SeismicArray(object):
         :param lim: Maximum value of slowness/wavenumber.
         :param step: Step in slowness/wavenumber.
         """
-        import matplotlib.pyplot as plt
         ranges = np.arange(-lim, lim + step, step)
         # plt.pcolor(ranges, ranges, transff.T, cmap=cm.viridis)
         plt.contour(ranges, ranges, transff.T, 10)
@@ -2191,14 +2186,14 @@ class SeismicArray(object):
                                              pstep)):
                 for j, sy in enumerate(np.arange(pymin, pymax + pstep / 10.,
                                                  pstep)):
-                    for k, f in enumerate(np.arange(fmin, fmax + fstep / 10.,
+                    for m, f in enumerate(np.arange(fmin, fmax + fstep / 10.,
                                                     fstep)):
                         _sum = 0j
-                        for l in np.arange(len(geometry)):
-                            _sum += np.exp(complex(0., (geometry[l, 0] * sx +
-                                                        geometry[l, 1] * sy) *
+                        for n in np.arange(len(geometry)):
+                            _sum += np.exp(complex(0., (geometry[n, 0] * sx +
+                                                        geometry[n, 1] * sy) *
                                                    2 * np.pi * f))
-                        buff[k] = abs(_sum) ** 2
+                        buff[m] = abs(_sum) ** 2
                     transff[i, j] = cumtrapz(buff, dx=fstep)[-1]
 
         transff /= transff.max()
@@ -2369,12 +2364,12 @@ class SeismicArray(object):
                                 s + offset: s + nsamp + offset]
                             singlet += 1. / nstat * np.sum(shifted * shifted)
                             try:
-                                beam += 1. / nstat * shifted * np.power(coh,
-                                                                        nthroot)
+                                beam += 1. / nstat * shifted * \
+                                        np.power(coh, nthroot)
                             except ValueError:
                                 _coh = coh[:len(shifted)]
-                                temp = 1. / nstat * shifted * np.power(_coh,
-                                                                       nthroot)
+                                temp = 1. / nstat * shifted * \
+                                    np.power(_coh, nthroot)
                                 beam += np.pad(temp, (0, beam.shape[0] -
                                                       temp.shape[0]),
                                                'constant')
@@ -2393,7 +2388,8 @@ class SeismicArray(object):
                 nhigh = min(nfft / 2 - 1, nhigh)  # avoid using nyquist
                 nf = nhigh - nlow + 1  # include upper and lower frequency
 
-                steer = np.empty((int(nf), grdpts_x, grdpts_y, nstat), dtype='c16')
+                steer = np.empty((int(nf), grdpts_x, grdpts_y, nstat),
+                                 dtype='c16')
                 spec = np.zeros((nstat, int(nf)), dtype='c16')
                 time_shift_table *= -1.
                 clibsignal.calcSteer(nstat, grdpts_x, grdpts_y, int(nf), nlow,
@@ -2407,15 +2403,16 @@ class SeismicArray(object):
                         #   cosine_taper(nsamp, p=0.22)[0:len(dat)]
                         tap = cosine_taper(len(dat), p=0.22)
                         dat = (dat - dat.mean()) * tap
-                        spec[i, :] = np.fft.rfft(dat, nfft)[int(nlow): int(nlow + nf)]
+                        spec[i, :] = np.fft.rfft(dat, nfft)[int(nlow):
+                                                            int(nlow + nf)]
                 except IndexError:
                     break
 
                 for i in range(grdpts_x):
                     for j in range(grdpts_y):
-                        for k in range(int(nf)):
-                            for l in range(nstat):
-                                steer[k, i, j, l] *= spec[l, k]
+                        for m in range(int(nf)):
+                            for n in range(nstat):
+                                steer[m, i, j, n] *= spec[n, m]
 
                 beam = np.absolute(np.sum(steer, axis=3))
                 less = np.max(beam, axis=1)
@@ -2465,7 +2462,8 @@ class SeismicArray(object):
             raise ValueError(msg)
         return np.array(res)
 
-    def _vespagram_baz(self, stream, time_shift_table, starttime, endtime,
+    @staticmethod
+    def _vespagram_baz(stream, time_shift_table, starttime, endtime,
                        method="DLS", nthroot=1):
         """
         Estimating the azimuth or slowness vespagram
@@ -2608,22 +2606,26 @@ class SeismicArray(object):
         geo_a = self._geometry_dict_to_array(geometry)
         # compute barycenter of stations
         center = geo_a.sum(axis=0) / geo_a.shape[0]
-        # compute basis (vh[0], vh[1]) and normal vector of the best fitting plane (vh[2])
+        # compute basis and normal vector of the best fitting plane (vh[2])
         # the plane minimizes the squared distance of the points to the plane
-        # taken from: "https://stackoverflow.com/questions/35070178/fit-plane-to-a-set-of-points-in-3d-scipy-
-        # optimize-minimize-vs-scipy-linalg-lsts"
+        # taken from: "https://stackoverflow.com/questions/35070178/fit-plane-
+        # to-a-set-of-points-in-3d-scipy-optimize-minimize-vs-scipy-linalg-lsts"
         u, s, vh = np.linalg.linalg.svd(geo_a-center)
         # satisfies the plane equation a*x + b*y + c*z = 0
         result = np.zeros((len(geometry), 3))
         # now we are seeking the station positions on that plane
         # geometry[:,2] += v[2,-1]
         n = vh[2, :]
-        result[:, 0] = (geo_a[:, 0] - n[0] * (n[0] * geo_a[:, 0] + geo_a[:, 1] * n[1] + n[2] * geo_a[:, 2]) /
+        result[:, 0] = (geo_a[:, 0] - n[0] * (n[0] * geo_a[:, 0] +
+                        geo_a[:, 1] * n[1] + n[2] * geo_a[:, 2]) /
                         (n[0] * n[0] + n[1] * n[1] + n[2] * n[2])**0.5)
-        result[:, 1] = (geo_a[:, 1] - n[1] * (n[0] * geo_a[:, 0] + geo_a[:, 1] * n[1] + n[2] * geo_a[:, 2]) /
+        result[:, 1] = (geo_a[:, 1] - n[1] * (n[0] * geo_a[:, 0] +
+                        geo_a[:, 1] * n[1] + n[2] * geo_a[:, 2]) /
                         (n[0] * n[0] + n[1] * n[1] + n[2] * n[2])**0.5)
-        result[:, 2] = (geo_a[:, 2] - n[2] * (n[0] * geo_a[:, 0] + geo_a[:, 1] * n[1] + n[2] * geo_a[:, 2]) /
-                        (n[0] * n[0] + n[1] * n[1] + n[2] * n[2])**0.5) + center[2]
+        result[:, 2] = (geo_a[:, 2] - n[2] * (n[0] * geo_a[:, 0] +
+                        geo_a[:, 1] * n[1] + n[2] * geo_a[:, 2]) /
+                        (n[0] * n[0] + n[1] * n[1] + n[2] * n[2])**0.5) + \
+                        center[2]
         geometry = result[:]
         # print("Best fitting plane-coordinates :\n", geometry)
 
@@ -2758,7 +2760,6 @@ class SeismicArray(object):
         starttime = max([tr.stats.starttime for tr in stream])
         stt = starttime
         endtime = min([tr.stats.endtime for tr in stream])
-        e = endtime
         stream.trim(starttime, endtime)
         shift = []
         stream = stream.copy()
@@ -2796,7 +2797,8 @@ class SeismicArray(object):
         self.shifttrace_freq(stream, -shift)
         return stream
 
-    def shifttrace_freq(self, stream, t_shift):
+    @staticmethod
+    def shifttrace_freq(stream, t_shift):
         if isinstance(stream, Stream):
             for i, tr in enumerate(stream):
                 ndat = tr.stats.npts
