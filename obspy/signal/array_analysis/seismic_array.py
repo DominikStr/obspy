@@ -82,9 +82,10 @@ class SeismicArray(object):
     contain any seismic data. The locations of the array components
     (stations or channels) must be set in the respective objects (for an
     overview of the inventory system, see :mod:`~obspy.core.inventory`).
-    While the inventory must be composed of :class:`~obspy.core.inventory.channel.Channel` objects,
-    they do not need to represent actual seismic stations; their only required attribute is
-    the location information.
+    While the inventory must be composed of
+    :class:`~obspy.core.inventory.channel.Channel` objects,
+    they do not need to represent actual seismic stations; their only required
+    attribute is the location information.
 
     :param name: Array name.
     :type name: str
@@ -469,7 +470,7 @@ class SeismicArray(object):
         :param latitude: latitude of reference origin
         :param longitude: longitude of reference origin
         :param absolute_height_in_km: elevation of reference origin, in km
-        :param vel_cor: correction velocity (upper layer) in km/s. May be given
+        :param vel_cor: Correction velocity (upper layer) in km/s. May be given
             at each station as a dictionary with the station/channel IDs as
             keys (same as in self.geometry).
         :type static3d: bool
@@ -534,7 +535,7 @@ class SeismicArray(object):
             t = rxy*s - rz*cos(inc)/vel_cor
             where inc is defined by inc = asin(vel_cor*slow)
 
-        :return 2D Timeshift table for each station in the array. Each table
+        :return 2D timeshift table for each station in the array. Each table
                 gives the timeshift for all slowness_x and slowness_y
                 combinations.
         """
@@ -582,8 +583,8 @@ class SeismicArray(object):
                   align=False, align_phase='P',
                   density_cmap=obspy_sequential, plot="wiggle", show=True):
         """
-        :param stream: Stream containing all traces of the array.
         :type stream: :class:`~obspy.core.stream.Stream`.
+        :param stream: Stream containing all traces of the array.
         :type event_or_baz: float or :class:`~obspy.core.event.event.Event` or
             :class:`~obspy.core.event.origin.Origin`
         :param event_or_baz: Backazimuth for vespagram or event/origin object
@@ -604,7 +605,7 @@ class SeismicArray(object):
             with keys ``'latitude'``, ``'longitude'``, ``'elevation'``
             (elevation in meters).
         :type method: str
-        :param method: Method used to stack traces. Can be either 'DLS' or 'PWS':
+        :param method: Method used to stack traces. Either 'DLS' or 'PWS':
                         DLS: delay and sum
                         PWS: phase-weighted stack
         :type nthroot: float
@@ -619,11 +620,15 @@ class SeismicArray(object):
             at each station as a dictionary with the station/channel IDs as
             keys (same as in self.geometry).
         :type wiggle_scale: float
-        :param wiggle_scale: Relative scaling for wiggle plot (unused for density plot).
+        :param wiggle_scale: Relative scaling for wiggle plot
+                            (unused for density plot).
         :type align: bool
-        :param align: Whether traces should be aligned with theoretical arrival given by align_phase.
+        :param align: Whether traces should be aligned with theoretical arrival
+                       given by phase_name.
         :type align_phase: str
-        :param align_phase: Phase name given in usual convention by which traces should be aligned.
+        :param align_phase: Phase by which the traces are aligned. Mostly
+                           conventional naming, for more information see:
+                            docs.obspy.org/packages/obspy.taup.html
         :type density_cmap: :class:`~matplotlib.colors.Colormap`
         :param density_cmap: Colormap used for density plot.
         :type plot: str or None
@@ -864,12 +869,17 @@ class SeismicArray(object):
         :param static3d: static correction of topography using `vel_corr` as
          velocity (slow!)
         :type static3d: bool
+        :param array_response: Specify if array response should be used.
+        :type array_response: bool
         :param vel_corr: Correction velocity for static topography correction
          in km/s.
         :type vel_corr: float
         :param wlen: sliding window for analysis in seconds, use -1 to use the
          whole trace without windowing.
         :type wlen: float
+        :param wfrac: Fraction of the window not overlapping with other
+                      windows.
+        :type wfrac: float
         :param slx: Min/Max slowness for analysis in x direction [s/km].
         :type slx: (float, float)
         :param sly: Min/Max slowness for analysis in y direction [s/km].
@@ -881,7 +891,7 @@ class SeismicArray(object):
          Supported options:
          "slowness_baz" for backazimuth-slowness maps for each window,
          "slowness_xy" for slowness_xy maps for each window.
-         Further plotting otions are attached to the returned object.
+         Further plotting options are attached to the returned object.
         :rtype: :class:`~obspy.signal.array_analysis.BeamformerResult`
         """
         return self._array_analysis_helper(stream=stream, method="SWP",
@@ -912,6 +922,8 @@ class SeismicArray(object):
         :param static3d: static correction of topography using `vel_corr` as
          velocity (slow!)
         :type static3d: bool
+        :param array_response: Specify if array response should be used.
+        :type array_response: bool
         :param vel_corr: Correction velocity for static topography correction
          in km/s.
         :type vel_corr: float
@@ -919,6 +931,9 @@ class SeismicArray(object):
          whole trace without windowing.
         :type wlen: float
         :param slx: Min/Max slowness for analysis in x direction [s/km].
+        :type wfrac: float
+        :param wfrac: Fraction of the window not overlapping with other
+                      windows.
         :type slx: (float, float)
         :param sly: Min/Max slowness for analysis in y direction [s/km].
         :type sly: (float, float)
@@ -959,12 +974,17 @@ class SeismicArray(object):
         :param static3d: static correction of topography using `vel_corr` as
          velocity (slow!)
         :type static3d: bool
+        :param array_response: Specify if array response should be used.
+        :type array_response: bool
         :param vel_corr: Correction velocity for static topography correction
          in km/s.
         :type vel_corr: float
         :param wlen: sliding window for analysis in seconds, use -1 to use the
          whole trace without windowing.
         :type wlen: float
+        :param wfrac: Fraction of the window not overlapping with other
+                      windows.
+        :type wfrac: float
         :param slx: Min/Max slowness for analysis in x direction [s/km].
         :type slx: (float, float)
         :param sly: Min/Max slowness for analysis in y direction [s/km].
@@ -1007,6 +1027,8 @@ class SeismicArray(object):
         :param static3d: static correction of topography using `vel_corr` as
          velocity (slow!)
         :type static3d: bool
+        :param array_response: Specify if array response should be used.
+        :type array_response: bool
         :param vel_corr: Correction velocity for static topography correction
          in km/s.
         :type vel_corr: float
@@ -1057,6 +1079,8 @@ class SeismicArray(object):
         :param static3d: static correction of topography using `vel_corr` as
          velocity (slow!)
         :type static3d: bool
+        :param array_response: Specify if array response should be used.
+        :type array_response: bool
         :param vel_corr: Correction velocity for static topography correction
          in km/s.
         :type vel_corr: float
@@ -1136,7 +1160,6 @@ class SeismicArray(object):
          Further plotting otions are attached to the returned object.
         :rtype: :class:`~obspy.signal.array_analysis.BeamformerResult`
         """
-        import matplotlib.pyplot as plt
         if method not in ("FK", "CAPON", "DLS", "PWS", "SWP"):
             raise ValueError("Invalid method: ''" % method)
 
@@ -1313,7 +1336,13 @@ class SeismicArray(object):
         """
         Attaches dictionary with latitude, longitude and elevation to each
         trace in stream as `trace.stats.coords`. Takes into account local
-        depth of sensor.
+        depth of sensor. If origin is given the distance between the source
+        and receiver is calculated and attached as well.
+
+        :param stream: Stream on which the coordiantes are attached to.
+        :type stream: :class:`obspy.core.stream.Stream`
+        :param origin: Origin of the seismic source.
+        :type origin: :class:`~obspy.core.event.origin.Origin`
         """
         geo = self.geometry
 
@@ -1580,6 +1609,52 @@ class SeismicArray(object):
                        u, sub_freq_range, n_min_stns, polarisation,
                        whiten, phaseonly, coherency, win_average,
                        datalen_sec, uindex, verbose=False):
+        """
+        Three component beamforming wrapped routine.
+
+
+        :param n_min_stns: Minimum number of stations for which data must be
+         present in a time window, otherwise that window is skipped.
+        :param win_frac: fraction of sliding window to use for step
+
+
+        :return: A :class:`~obspy.signal.array_analysis.BeamformerResult`
+        object containing the beamforming results, with dimensions of
+        backazimuth range, slowness range, number of windows and number of
+        discrete frequencies; as well as frequency and incidence angle arrays
+        (the latter will be zero for radial and transversal polarization)
+
+        :param stream_n: Stream of all traces for the North component.
+        :param stream_e: Stream of East components.
+        :param stream_z: Stream of Up components. Will be ignored for Love
+         waves.
+        :param win_len: Window length in seconds
+        :param win_frac: Overlapping fraction of the window.
+        :param u: Array of slowness values.
+        :param sub_freq_range: Frequency band (min, max) that is used for
+         beamforming and returned. Ideally, use the frequency band of the
+         pre-filter.
+        :param n_min_stns: Minimum number of stations for which data must be
+        :param polarisation: Numeric key specifying the wave polarisation:
+                             transvers: 0
+                             radial: 1
+                             elliptic_retrograde: 2
+                             elliptic_prograde: 3
+                             p: 4
+                             sv' 5
+        :param whiten: If set to a number, the 3-component data spectra are
+         jointly whitened along the frequency axis with a moving window of
+         frequency width 'whiten'.
+        :param phaseonly: Whether to totally disregard data amplitudes.
+        :param coherency: whether to normalise the beam power spectral density
+         by the average station power spectral density of all components
+        :param win_average: number of windows to average covariance matrix over
+        :param datalen_sec: Difference between start time and end time in [s].
+        :param uindex: Slowness range for angle measurments.
+        :param verbose: Produce detailed logging information.
+        :return: Beamforming results as array, frequencies array,
+                 incidence array, window start times array
+        """
         # backazimuth range to search
         theo_backazi = np.arange(0, 362, 2) * math.pi / 180.
 
@@ -2014,6 +2089,12 @@ class SeismicArray(object):
     def plot_radial_transfer_function(self, smin, smax, sstep, freqs):
         """
         Plot array transfer function radially, as function of slowness.
+
+        :param smin: Minimum slowness value.
+        :param smax: Maximum slowness value.
+        :param sstep: Slowness step.
+        :param freqs: List of frequencies for which the radial transfer
+                      function should be plotted.
         """
         u = np.arange(smin, smax, sstep)
         theo_backazi = np.arange(0, 362, 2) * math.pi / 180.
@@ -2081,7 +2162,7 @@ class SeismicArray(object):
         :param sstep: Step in slowness.
         :param freq_min: Minimum frequency in signal.
         :param freq_max: Maximum frequency in signal.
-        :param freq_step: Frequency sample distance
+        :param freq_step: Frequency sample distance.
         """
         transff = self.array_transfer_function_freqslowness(
             slim, sstep, freq_min, freq_max, freq_step)
@@ -2147,6 +2228,8 @@ class SeismicArray(object):
         :param fmin: Minimum frequency (only for slowness calculation).
         :param fmax: Maximum frequency (only for slowness calculation).
         :param fstep: Frequency sample distance (only with slowness).
+        :return: Array transfer function as function of either wavenumber or
+                 slowness and frequency
         """
         if isinstance(plim, (float, int, np.int32, np.int64)):
             pxmin = -plim
@@ -2466,13 +2549,23 @@ class SeismicArray(object):
     def _vespagram_baz(stream, time_shift_table, starttime, endtime,
                        method="DLS", nthroot=1):
         """
-        Estimating the azimuth or slowness vespagram
+        Estimating the azimuth or slowness vespagram.
+        :type stream: stream: :class:`~obspy.core.stream.Stream`.
         :param stream: Stream object.
-            items/attributes. See param coordsys
+        :param time_shift_table: 2D timeshift table for each station in the
+                                array. Each table gives the timeshift for all
+                                slowness_x and slowness_y combinations.
         :type starttime: UTCDateTime
         :param starttime: Starttime of interest
         :type endtime: UTCDateTime
         :param endtime: Endtime of interest
+        :type method: str
+        :param method: Method used for computaion of the vespagram
+                       Can be either:
+                           -DlS: Delay and Sum
+                           -PWS: Phase Weighted Stack
+        :param nthroot: nth-root processing; nth gives the root (1,2,3,4),
+         default 1 (no nth-root)
         :return: numpy.ndarray of beams with different slownesses
         """
         fs = stream[0].stats.sampling_rate
@@ -2569,6 +2662,12 @@ class SeismicArray(object):
         Take a geometry dictionary (as provided by self.geometry, or by
         _get_geometry_xyz) and convert to a numpy array, as used in some
         methods.
+        :type geometry: dict
+        :param geometry: A dictionary with keys: SEED IDs and values:
+                         dictionaries of 'latitude', 'longitude' and
+                         'absolute_height_in_km'.
+        :return: Sorted (by station) two dimensional numpy.ndarray of latitude,
+                 longitude and height for each station.
         """
         geom_array = np.empty((len(geometry), 3))
         try:
@@ -2588,8 +2687,9 @@ class SeismicArray(object):
         Correct a given array geometry with a best-fitting plane.
 
         :type geometry: dict
-        :param geometry: Nested dictionary of stations, as returned for example
-            by :attr:`geometry` or :meth:`_get_geometry_xyz`.
+        :param geometry: A dictionary with keys: SEED IDs and values:
+                         dictionaries of 'latitude', 'longitude' and
+                         'absolute_height_in_km'.
         :return: The corrected geometry as dictionary, with the same keys as
             passed in.
         """
@@ -2756,7 +2856,27 @@ class SeismicArray(object):
         plt.show()
 
     def align_phases(self, stream, event, phase_name, vel_model='ak135'):
+        """
+        Aligns all trace along a common theoretical phase arrival and returns
+        the modified stream.
 
+        :param stream: Stream containing all traces of the array.
+        :type stream: :class:`~obspy.core.stream.Stream`.
+        :param event: Event or Origin Object to calculate theoretical
+                      travel-times from.
+        :type event: :class:`~obspy.core.event.event.Event` or
+                     :class:`~obspy.core.event.origin.Origin`
+        :param phase_name: Phase by which the traces are aligned. Mostly
+                           conventional naming, for more information see:
+                            docs.obspy.org/packages/obspy.taup.html
+        :type phase_name: str
+        :param vel_model: 1D velocity model used for calculation of the
+                          theoretical phase arrivals. A list of possible models
+                          can be found here:
+                          docs.obspy.org/packages/obspy.taup.html
+        :type vel_model: str
+        :return: Stream object with shifted traces.
+        """
         starttime = max([tr.stats.starttime for tr in stream])
         stt = starttime
         endtime = min([tr.stats.endtime for tr in stream])

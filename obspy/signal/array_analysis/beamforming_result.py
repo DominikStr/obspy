@@ -28,8 +28,31 @@ def plot_array_analysis(out, transff, sllx, slmx, slly, slmy, sls,
     """
     Some plotting taken out from _array_analysis_helper. Can't do the array
     response overlay now though.
+
+
+    :param out: Output of covariance array processing.
+    :param transff: Transfer function to plot.
+    :param sllx: slowness minimum on x-axis
+    :param slmx: slowness maximum on x-axis
+    :param slly: slowness minimum on y-axis
+    :param slmy: slowness maximum on y-axis
+    :param sls: slowness steps on both axis
+    :param filename_patterns: Filename pattern to read in relative power maps.
     :param baz_plot: Whether to show backazimuth-slowness map (True) or
      slowness x-y map (False).
+    :type baz_plot: bool
+    :param method: Method used to do the covariance array processing. Can be
+                   either 'FK' or 'CAPON'.
+    :param array_r: Specify if array response should be used.
+    :type array_r: bool
+    :param st_workon: Stream used for the array processing.
+    :type st_workon: :class:`obspy.core.stream.Stream`
+    :param starttime: Starttime of interest
+    :type starttime: UTCDateTime
+    :param wlen: Sliding window for analysis in seconds, use -1 to use the
+         whole trace without windowing.
+    :param endtime: Endtime of interest
+    :type endtime: UTCDateTime
     """
 
     trace = []
